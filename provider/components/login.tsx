@@ -56,6 +56,7 @@ export function ProviderLoginPage() {
       }
       setUser(authUser);
       notify(`Welcome back, ${authUser.name}`);
+      router.replace("/");
     } catch (cause) {
       setError(
         apiError(
