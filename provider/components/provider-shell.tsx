@@ -202,7 +202,7 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
           </span>
           <a
             className="provider-workspace-link"
-            href="http://127.0.0.1:3000"
+            href="https://saas-tenant-iota.vercel.app"
             target="_blank"
             rel="noreferrer"
           >
