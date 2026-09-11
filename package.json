@@ -9,7 +9,7 @@
     "dev": "next dev --hostname 127.0.0.1 --port 3002",
     "build": "next build",
     "start": "next dev --hostname 127.0.0.1 --port 3002",
-    "lint": "oxlint",
+    "lint": "oxlint app provider",
     "format": "oxfmt",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
