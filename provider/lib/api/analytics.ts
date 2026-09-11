@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api } from "./client";
 
 export type DashboardMetrics = {
   activeTenants: number;
@@ -23,6 +23,6 @@ export type DashboardMetrics = {
 };
 
 export async function getDashboardMetrics(): Promise<DashboardMetrics> {
-  const res = await api.get<DashboardMetrics>('/platform/dashboard');
+  const res = await api.get<DashboardMetrics>("/platform/dashboard");
   return res.data;
 }

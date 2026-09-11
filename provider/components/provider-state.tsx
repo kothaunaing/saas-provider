@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   createContext,
@@ -6,7 +6,7 @@ import {
   useContext,
   useEffect,
   useState,
-} from 'react';
+} from "react";
 import {
   getMe,
   logout,
@@ -28,16 +28,16 @@ import {
   type QueryPlansParams,
   type QueryInvoicesParams,
   type QueryTicketsParams,
-} from '@/provider/lib/api';
+} from "@/provider/lib/api";
 
 const defaultSettings: ProviderSettings = {
-  platformName: 'Serenity Cloud',
-  supportEmail: 'support@serenity.cloud',
-  trialDays: 14,
-  tenantApproval: true,
+  platformName: "",
+  supportEmail: "",
+  trialDays: 0,
+  tenantApproval: false,
   maintenanceMode: false,
-  incidentEmails: true,
-  billingEmails: true,
+  incidentEmails: false,
+  billingEmails: false,
 };
 
 const defaultMeta: PaginationMeta = {
@@ -127,11 +127,11 @@ export function ProviderState({ children }: { children: React.ReactNode }) {
 
   const [settings, setSettings] = useState<ProviderSettings>(defaultSettings);
   const [analytics, setAnalytics] = useState<DashboardMetrics | null>(null);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState("");
 
   function notify(message: string) {
     setNotice(message);
-    window.setTimeout(() => setNotice(''), 3500);
+    window.setTimeout(() => setNotice(""), 3500);
   }
 
   const logoutUser = useCallback(async () => {
@@ -141,7 +141,7 @@ export function ProviderState({ children }: { children: React.ReactNode }) {
       // ignore
     } finally {
       setUser(null);
-      notify('You have been signed out.');
+      notify("You have been signed out.");
     }
   }, []);
 
@@ -152,7 +152,7 @@ export function ProviderState({ children }: { children: React.ReactNode }) {
       try {
         const current = await getMe();
         if (mounted) {
-          if (current.role === 'PLATFORM_ADMIN') {
+          if (current.role === "PLATFORM_ADMIN") {
             setUser(current);
           } else {
             setUser(null);
@@ -394,6 +394,6 @@ export function ProviderState({ children }: { children: React.ReactNode }) {
 
 export function useProviderState() {
   const value = useContext(ProviderContext);
-  if (!value) throw new Error('ProviderState is required');
+  if (!value) throw new Error("ProviderState is required");
   return value;
 }

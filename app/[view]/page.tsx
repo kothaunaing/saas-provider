@@ -1,10 +1,17 @@
-import { notFound } from 'next/navigation';
+import { notFound } from "next/navigation";
 import {
   ProviderDashboard,
   type ProviderView,
-} from '@/provider/components/provider-dashboard';
+} from "@/provider/components/provider-dashboard";
 
-const views = ['tenants', 'plans', 'billing', 'support', 'settings'] as const;
+const views = [
+  "tenants",
+  "plans",
+  "billing",
+  "support",
+  "settings",
+  "errors",
+] as const;
 
 export const dynamicParams = false;
 export function generateStaticParams() {

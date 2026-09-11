@@ -1,4 +1,4 @@
-import { api, type PaginatedResult, type PaginationParams } from './client';
+import { api, type PaginatedResult, type PaginationParams } from "./client";
 
 export type Plan = {
   id: string;
@@ -31,7 +31,7 @@ export type UpdatePlanPayload = Partial<CreatePlanPayload>;
 export async function getPlans(
   params?: QueryPlansParams,
 ): Promise<PaginatedResult<Plan>> {
-  const res = await api.get<PaginatedResult<Plan>>('/platform/plans', {
+  const res = await api.get<PaginatedResult<Plan>>("/platform/plans", {
     params,
   });
   return res.data;
@@ -43,7 +43,7 @@ export async function getPlan(id: string): Promise<Plan> {
 }
 
 export async function createPlan(payload: CreatePlanPayload): Promise<Plan> {
-  const res = await api.post<Plan>('/platform/plans', payload);
+  const res = await api.post<Plan>("/platform/plans", payload);
   return res.data;
 }
 

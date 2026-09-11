@@ -1,14 +1,14 @@
-import { api, type PaginatedResult, type PaginationParams } from './client';
+import { api, type PaginatedResult, type PaginationParams } from "./client";
 
 export type TenantStatus =
-  | 'ACTIVE'
-  | 'TRIAL'
-  | 'PENDING'
-  | 'SUSPENDED'
-  | 'Active'
-  | 'Trial'
-  | 'Pending'
-  | 'Suspended';
+  | "ACTIVE"
+  | "TRIAL"
+  | "PENDING"
+  | "SUSPENDED"
+  | "Active"
+  | "Trial"
+  | "Pending"
+  | "Suspended";
 
 export type Tenant = {
   id: string;
@@ -57,7 +57,7 @@ export interface UpdateTenantPayload {
 export async function getTenants(
   params?: QueryTenantsParams,
 ): Promise<PaginatedResult<Tenant>> {
-  const res = await api.get<PaginatedResult<Tenant>>('/platform/tenants', {
+  const res = await api.get<PaginatedResult<Tenant>>("/platform/tenants", {
     params,
   });
   return res.data;
@@ -71,7 +71,7 @@ export async function getTenant(id: string): Promise<Tenant> {
 export async function createTenant(
   payload: CreateTenantPayload,
 ): Promise<Tenant> {
-  const res = await api.post<Tenant>('/platform/tenants', payload);
+  const res = await api.post<Tenant>("/platform/tenants", payload);
   return res.data;
 }
 

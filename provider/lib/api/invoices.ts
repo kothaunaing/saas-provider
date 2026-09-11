@@ -1,4 +1,4 @@
-import { api, type PaginatedResult, type PaginationParams } from './client';
+import { api, type PaginatedResult, type PaginationParams } from "./client";
 
 export type Invoice = {
   id: string;
@@ -40,21 +40,21 @@ export async function getInvoices(
   params?: QueryInvoicesParams,
 ): Promise<PaginatedResult<Invoice>> {
   const res = await api.get<PaginatedResult<RawInvoiceResponse>>(
-    '/platform/invoices',
+    "/platform/invoices",
     { params },
   );
   return {
     data: res.data.data.map((item) => ({
       id: item.id,
       tenantId: item.tenantId,
-      tenant: item.tenantName ?? item.tenant ?? '',
+      tenant: item.tenantName ?? item.tenant ?? "",
       tenantName: item.tenantName,
       tenantEmail: item.tenantEmail,
-      plan: item.plan ?? '',
+      plan: item.plan ?? "",
       amount: Number(item.amount ?? 0),
-      status: item.status ?? 'DUE',
+      status: item.status ?? "DUE",
       displayStatus: item.displayStatus,
-      date: item.date ?? '',
+      date: item.date ?? "",
       issuedAt: item.issuedAt,
       createdAt: item.createdAt,
     })),

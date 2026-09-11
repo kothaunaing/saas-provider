@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   Activity,
@@ -16,9 +16,9 @@ import {
   Sparkles,
   Trash2,
   X,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+} from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   type Tenant,
   type Plan,
@@ -35,57 +35,69 @@ import {
   updateTicket,
   deleteTicket,
   saveSettings,
-} from '@/provider/lib/api';
-import { money } from '@/provider/lib/provider-utils';
-import { useProviderState } from './provider-state';
+  getSystemErrors,
+  resolveSystemError,
+  getHealth,
+} from "@/provider/lib/api";
+import { money } from "@/provider/lib/provider-utils";
+import { useProviderState } from "./provider-state";
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (
     err &&
-    typeof err === 'object' &&
-    'response' in err &&
-    (err as { response?: { data?: { message?: string } } }).response?.data?.message
+    typeof err === "object" &&
+    "response" in err &&
+    (err as { response?: { data?: { message?: string } } }).response?.data
+      ?.message
   ) {
-    return String((err as { response?: { data?: { message?: string } } }).response?.data?.message);
+    return String(
+      (err as { response?: { data?: { message?: string } } }).response?.data
+        ?.message,
+    );
   }
   return fallback;
 }
 
 export const providerViews = [
-  'overview',
-  'tenants',
+  "overview",
+  "tenants",
 
-  'plans',
-  'billing',
-  'support',
-  'settings',
+  "plans",
+  "billing",
+  "support",
+  "settings",
+  "errors",
 ] as const;
 export type ProviderView = (typeof providerViews)[number];
 
 const copy = {
   overview: [
-    'Platform overview',
-    'Monitor growth, tenant activity, and the work that needs your attention.',
+    "Platform overview",
+    "Monitor growth, tenant activity, and the work that needs your attention.",
   ],
   tenants: [
-    'Tenant management',
-    'Review every business using the platform and control access from one place.',
+    "Tenant management",
+    "Review every business using the platform and control access from one place.",
   ],
   plans: [
-    'Plans & subscriptions',
-    'Set the packages available to salons and keep limits easy to understand.',
+    "Plans & subscriptions",
+    "Set the packages available to salons and keep limits easy to understand.",
   ],
   billing: [
-    'Billing control',
-    'Track subscription invoices, payment failures, and monthly collections.',
+    "Billing control",
+    "Track subscription invoices, payment failures, and monthly collections.",
   ],
   support: [
-    'Support desk',
-    'Triage tenant questions and keep urgent operational issues moving.',
+    "Support desk",
+    "Triage tenant questions and keep urgent operational issues moving.",
   ],
   settings: [
-    'System settings',
-    'Configure onboarding, platform communication, and maintenance controls.',
+    "System settings",
+    "Configure onboarding, platform communication, and maintenance controls.",
+  ],
+  errors: [
+    "System errors",
+    "Inspect application failures and resolve operational incidents.",
   ],
 } satisfies Record<ProviderView, [string, string]>;
 
@@ -95,18 +107,94 @@ export function ProviderDashboard({ view }: { view: ProviderView }) {
     <>
       <PageHead
         eyebrow={
-          view === 'overview' ? 'BUSINESS CONTROL CENTER' : 'SERENITY CLOUD'
+          view === "overview" ? "BUSINESS CONTROL CENTER" : "SERENITY CLOUD"
         }
         title={title}
         subtitle={subtitle}
       />
-      {view === 'overview' && <Overview />}
-      {view === 'tenants' && <Tenants />}
-      {view === 'plans' && <Plans />}
-      {view === 'billing' && <Billing />}
-      {view === 'support' && <Support />}
-      {view === 'settings' && <SettingsPage />}
+      {view === "overview" && <Overview />}
+      {view === "tenants" && <Tenants />}
+      {view === "plans" && <Plans />}
+      {view === "billing" && <Billing />}
+      {view === "support" && <Support />}
+      {view === "settings" && <SettingsPage />}
+      {view === "errors" && <ErrorsPage />}
     </>
+  );
+}
+
+function ErrorsPage() {
+  const [errors, setErrors] = useState<
+    Awaited<ReturnType<typeof getSystemErrors>>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const { notify } = useProviderState();
+  useEffect(() => {
+    let active = true;
+    getSystemErrors()
+      .then((rows) => active && setErrors(rows))
+      .catch((error) =>
+        notify(getErrorMessage(error, "Failed to load system errors.")),
+      )
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [notify]);
+  async function resolve(id: string) {
+    try {
+      const updated = await resolveSystemError(id);
+      setErrors((rows) => rows.map((row) => (row.id === id ? updated : row)));
+      notify("Incident resolved.");
+    } catch (error) {
+      notify(getErrorMessage(error, "Failed to resolve incident."));
+    }
+  }
+  if (loading) return <p>Loading system errors…</p>;
+  return (
+    <section className="provider-card">
+      <div className="provider-card-head">
+        <div>
+          <h2>Incident log</h2>
+          <p>
+            {errors.filter((item) => item.status === "OPEN").length} open
+            incidents
+          </p>
+        </div>
+      </div>
+      <div className="provider-ticket-list">
+        {errors.map((item) => (
+          <div key={item.id} className="provider-ticket-item">
+            <span
+              className={`provider-priority priority-${item.status === "OPEN" ? "urgent" : "normal"}`}
+            >
+              {item.status}
+            </span>
+            <div>
+              <strong>
+                {item.statusCode} · {item.method} {item.path}
+              </strong>
+              <p>
+                {item.tenant?.name ?? "Platform"} ·{" "}
+                {new Date(item.occurredAt).toLocaleString()} · {item.message}
+              </p>
+            </div>
+            {item.status === "OPEN" && (
+              <button
+                type="button"
+                className="provider-link"
+                onClick={() => {
+                  void resolve(item.id);
+                }}
+              >
+                Resolve
+              </button>
+            )}
+          </div>
+        ))}
+        {!errors.length && <p>No system errors recorded.</p>}
+      </div>
+    </section>
   );
 }
 
@@ -138,7 +226,7 @@ function Metric({
   value,
   note,
   icon: Icon,
-  tone = 'indigo',
+  tone = "indigo",
 }: {
   label: string;
   value: string;
@@ -159,7 +247,7 @@ function Metric({
 }
 
 function Status({ value }: { value: string }) {
-  const normalized = value.toLowerCase().replace(/\s+/g, '-');
+  const normalized = value.toLowerCase().replace(/\s+/g, "-");
   return (
     <span className={`provider-status status-${normalized}`}>
       <i />
@@ -182,7 +270,7 @@ function Pagination({
   return (
     <div className="provider-pagination">
       <div className="provider-pagination-info">
-        Showing <strong>{start}</strong> to <strong>{end}</strong> of{' '}
+        Showing <strong>{start}</strong> to <strong>{end}</strong> of{" "}
         <strong>{meta.total}</strong> records
       </div>
       <div className="provider-pagination-actions">
@@ -194,7 +282,7 @@ function Pagination({
         >
           Previous
         </button>
-        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+        <span style={{ fontSize: "12px", color: "var(--muted)" }}>
           Page {meta.page} of {Math.max(1, meta.totalPages)}
         </span>
         <button
@@ -219,18 +307,22 @@ function Overview() {
   const openTickets = analytics ? analytics.openTickets : 0;
 
   const starter =
-    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === 'starter')?.count ?? 0;
+    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === "starter")
+      ?.count ?? 0;
   const pro =
-    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === 'pro')?.count ?? 0;
+    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === "pro")
+      ?.count ?? 0;
   const business =
-    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === 'business')?.count ?? 0;
+    analytics?.planDistribution?.find(
+      (p) => p.name.toLowerCase() === "business",
+    )?.count ?? 0;
   const totalPlans =
     analytics?.planDistribution?.reduce((sum, p) => sum + p.count, 0) || 1;
 
-  const recent = (analytics?.recentTenants && analytics.recentTenants.length > 0)
-    ? analytics.recentTenants
-    : tenants.slice(0, 5);
-
+  const recent =
+    analytics?.recentTenants && analytics.recentTenants.length > 0
+      ? analytics.recentTenants
+      : tenants.slice(0, 5);
 
   return (
     <>
@@ -423,16 +515,16 @@ function TenantTable({
             <tr
               key={tenant.id}
               onClick={() => onSelect?.(tenant)}
-              className={onSelect ? 'clickable' : ''}
+              className={onSelect ? "clickable" : ""}
             >
               <td aria-label="Tenant account">
                 <div className="provider-tenant-cell">
                   <span>
-                    {(tenant.name || 'Tenant')
-                      .split(' ')
+                    {(tenant.name || "Tenant")
+                      .split(" ")
                       .map((x) => x[0])
                       .slice(0, 2)
-                      .join('')}
+                      .join("")}
                   </span>
                   <div>
                     <strong>{tenant.name}</strong>
@@ -446,9 +538,9 @@ function TenantTable({
               <td>
                 <Status value={tenant.displayStatus || tenant.status} />
               </td>
-              <td>{tenant.staff ?? '—'}</td>
-              <td>{tenant.bookings ?? '—'}</td>
-              <td>{tenant.lastActive ?? 'Recently'}</td>
+              <td>{tenant.staff ?? "—"}</td>
+              <td>{tenant.bookings ?? "—"}</td>
+              <td>{tenant.lastActive ?? "Recently"}</td>
               <td>
                 <ChevronRight size={16} />
               </td>
@@ -456,7 +548,14 @@ function TenantTable({
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+              <td
+                colSpan={7}
+                style={{
+                  textAlign: "center",
+                  padding: "32px",
+                  color: "var(--muted)",
+                }}
+              >
                 No tenants found matching your search.
               </td>
             </tr>
@@ -479,16 +578,16 @@ function Tenants() {
     notify,
   } = useProviderState();
 
-  const [searchInput, setSearchInput] = useState(tenantsQuery.search ?? '');
+  const [searchInput, setSearchInput] = useState(tenantsQuery.search ?? "");
   const [selected, setSelected] = useState<Tenant | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newTenant, setNewTenant] = useState({
-    name: '',
-    slug: '',
-    ownerName: '',
-    email: '',
-    city: '',
-    planId: '',
+    name: "",
+    slug: "",
+    ownerName: "",
+    email: "",
+    city: "",
+    planId: "",
   });
 
   // Debounce search input to server query
@@ -503,7 +602,8 @@ function Tenants() {
   }, [searchInput, setTenantsQuery]);
 
   function handleFilterClick(statusFilter: string) {
-    const mapped = statusFilter === 'All' ? undefined : statusFilter.toUpperCase();
+    const mapped =
+      statusFilter === "All" ? undefined : statusFilter.toUpperCase();
     setTenantsQuery((prev) => ({ ...prev, status: mapped, page: 1 }));
   }
 
@@ -514,27 +614,34 @@ function Tenants() {
       setSelected(null);
       await Promise.all([refreshTenants(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to update tenant status.'));
+      notify(getErrorMessage(err, "Failed to update tenant status."));
     }
   }
 
   async function removeTenant(tenant: Tenant) {
-    if (window.confirm(`Permanently remove ${tenant.name} from the platform?`)) {
+    if (
+      window.confirm(`Permanently remove ${tenant.name} from the platform?`)
+    ) {
       try {
         await deleteTenant(tenant.id);
         setSelected(null);
         notify(`${tenant.name} was removed.`);
         await Promise.all([refreshTenants(), refreshAnalytics()]);
       } catch (err: unknown) {
-        notify(getErrorMessage(err, 'Failed to delete tenant.'));
+        notify(getErrorMessage(err, "Failed to delete tenant."));
       }
     }
   }
 
   async function handleCreateTenant(e: React.SyntheticEvent) {
     e.preventDefault();
-    if (!newTenant.name || !newTenant.slug || !newTenant.email || !newTenant.ownerName) {
-      notify('Please fill out all required fields.');
+    if (
+      !newTenant.name ||
+      !newTenant.slug ||
+      !newTenant.email ||
+      !newTenant.ownerName
+    ) {
+      notify("Please fill out all required fields.");
       return;
     }
     try {
@@ -543,17 +650,25 @@ function Tenants() {
         planId: newTenant.planId || (plans[0]?.id ?? undefined),
       });
       setIsCreating(false);
-      setNewTenant({ name: '', slug: '', ownerName: '', email: '', city: '', planId: '' });
+      setNewTenant({
+        name: "",
+        slug: "",
+        ownerName: "",
+        email: "",
+        city: "",
+        planId: "",
+      });
       notify(`Tenant "${newTenant.name}" registered successfully.`);
       await Promise.all([refreshTenants(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to create tenant.'));
+      notify(getErrorMessage(err, "Failed to create tenant."));
     }
   }
 
   const currentFilter = !tenantsQuery.status
-    ? 'All'
-    : tenantsQuery.status.charAt(0) + tenantsQuery.status.slice(1).toLowerCase();
+    ? "All"
+    : tenantsQuery.status.charAt(0) +
+      tenantsQuery.status.slice(1).toLowerCase();
 
   return (
     <>
@@ -567,9 +682,9 @@ function Tenants() {
           />
         </label>
         <div className="provider-filters">
-          {['All', 'Active', 'Trial', 'Pending', 'Suspended'].map((item) => (
+          {["All", "Active", "Trial", "Pending", "Suspended"].map((item) => (
             <button
-              className={currentFilter === item ? 'active' : ''}
+              className={currentFilter === item ? "active" : ""}
               key={item}
               onClick={() => handleFilterClick(item)}
             >
@@ -594,10 +709,15 @@ function Tenants() {
             </p>
           </div>
         </div>
-        <TenantTable rows={tenants} onSelect={(item) => setSelected(item as Tenant)} />
+        <TenantTable
+          rows={tenants}
+          onSelect={(item) => setSelected(item as Tenant)}
+        />
         <Pagination
           meta={tenantsMeta}
-          onPageChange={(page) => setTenantsQuery((prev) => ({ ...prev, page }))}
+          onPageChange={(page) =>
+            setTenantsQuery((prev) => ({ ...prev, page }))
+          }
         />
       </section>
 
@@ -638,26 +758,29 @@ function Tenants() {
               <Detail label="Bookings" value={String(selected.bookings)} />
             </div>
             <div className="provider-drawer-actions">
-              {(selected.status === 'PENDING' || selected.status === 'Pending') && (
+              {(selected.status === "PENDING" ||
+                selected.status === "Pending") && (
                 <button
                   className="provider-primary"
-                  onClick={() => changeStatus(selected, 'Active')}
+                  onClick={() => changeStatus(selected, "Active")}
                 >
                   <Check size={17} /> Approve tenant
                 </button>
               )}
-              {selected.status === 'SUSPENDED' || selected.status === 'Suspended' ? (
+              {selected.status === "SUSPENDED" ||
+              selected.status === "Suspended" ? (
                 <button
                   className="provider-primary"
-                  onClick={() => changeStatus(selected, 'Active')}
+                  onClick={() => changeStatus(selected, "Active")}
                 >
                   Reactivate account
                 </button>
               ) : (
-                selected.status !== 'PENDING' && selected.status !== 'Pending' && (
+                selected.status !== "PENDING" &&
+                selected.status !== "Pending" && (
                   <button
                     className="provider-secondary"
-                    onClick={() => changeStatus(selected, 'Suspended')}
+                    onClick={() => changeStatus(selected, "Suspended")}
                   >
                     Suspend account
                   </button>
@@ -705,7 +828,12 @@ function Tenants() {
                   setNewTenant((prev) => ({
                     ...prev,
                     name: val,
-                    slug: prev.slug || val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                    slug:
+                      prev.slug ||
+                      val
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, "-")
+                        .replace(/(^-|-$)/g, ""),
                   }));
                 }}
               />
@@ -717,7 +845,9 @@ function Tenants() {
                 required
                 placeholder="e.g. lotus-wellness"
                 value={newTenant.slug}
-                onChange={(e) => setNewTenant({ ...newTenant, slug: e.target.value })}
+                onChange={(e) =>
+                  setNewTenant({ ...newTenant, slug: e.target.value })
+                }
               />
             </label>
 
@@ -727,7 +857,9 @@ function Tenants() {
                 required
                 placeholder="e.g. Sophia Lin"
                 value={newTenant.ownerName}
-                onChange={(e) => setNewTenant({ ...newTenant, ownerName: e.target.value })}
+                onChange={(e) =>
+                  setNewTenant({ ...newTenant, ownerName: e.target.value })
+                }
               />
             </label>
 
@@ -738,7 +870,9 @@ function Tenants() {
                 required
                 placeholder="e.g. owner@lotuswellness.com"
                 value={newTenant.email}
-                onChange={(e) => setNewTenant({ ...newTenant, email: e.target.value })}
+                onChange={(e) =>
+                  setNewTenant({ ...newTenant, email: e.target.value })
+                }
               />
             </label>
 
@@ -747,7 +881,9 @@ function Tenants() {
               <input
                 placeholder="e.g. San Francisco, CA"
                 value={newTenant.city}
-                onChange={(e) => setNewTenant({ ...newTenant, city: e.target.value })}
+                onChange={(e) =>
+                  setNewTenant({ ...newTenant, city: e.target.value })
+                }
               />
             </label>
 
@@ -755,7 +891,9 @@ function Tenants() {
               Subscription Tier
               <select
                 value={newTenant.planId}
-                onChange={(e) => setNewTenant({ ...newTenant, planId: e.target.value })}
+                onChange={(e) =>
+                  setNewTenant({ ...newTenant, planId: e.target.value })
+                }
               >
                 <option value="">Select a plan</option>
                 {plans.map((p) => (
@@ -766,7 +904,11 @@ function Tenants() {
               </select>
             </label>
 
-            <button className="provider-primary" type="submit" style={{ marginTop: '14px' }}>
+            <button
+              className="provider-primary"
+              type="submit"
+              style={{ marginTop: "14px" }}
+            >
               Create Tenant
             </button>
           </form>
@@ -786,14 +928,16 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function Plans() {
-  const { plans, refreshPlans, refreshAnalytics, tenants, notify } = useProviderState();
+  const { plans, refreshPlans, refreshAnalytics, tenants, notify } =
+    useProviderState();
   const [editing, setEditing] = useState<Plan | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newPlan, setNewPlan] = useState({
-    name: '',
+    name: "",
     price: 49,
     staffLimit: 10 as number | null,
-    featuresText: 'Online appointment booking\nStaff schedule sync\nLoyalty program engine',
+    featuresText:
+      "Online appointment booking\nStaff schedule sync\nLoyalty program engine",
   });
 
   async function save(plan: Plan) {
@@ -807,40 +951,41 @@ function Plans() {
       notify(`${plan.name} plan updated.`);
       await Promise.all([refreshPlans(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to update plan.'));
+      notify(getErrorMessage(err, "Failed to update plan."));
     }
   }
 
   async function handleCreatePlan(e: React.SyntheticEvent) {
     e.preventDefault();
     if (!newPlan.name) {
-      notify('Plan name is required.');
+      notify("Plan name is required.");
       return;
     }
     try {
       const features = newPlan.featuresText
-        .split('\n')
+        .split("\n")
         .map((f) => f.trim())
         .filter(Boolean);
       await createPlan({
         name: newPlan.name,
         price: Number(newPlan.price),
-        interval: 'month',
+        interval: "month",
         staffLimit: newPlan.staffLimit ? Number(newPlan.staffLimit) : undefined,
         features,
         active: true,
       });
       setIsCreating(false);
       setNewPlan({
-        name: '',
+        name: "",
         price: 49,
         staffLimit: 10,
-        featuresText: 'Online appointment booking\nStaff schedule sync\nLoyalty program engine',
+        featuresText:
+          "Online appointment booking\nStaff schedule sync\nLoyalty program engine",
       });
       notify(`Plan "${newPlan.name}" created successfully.`);
       await Promise.all([refreshPlans(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to create plan.'));
+      notify(getErrorMessage(err, "Failed to create plan."));
     }
   }
 
@@ -852,14 +997,23 @@ function Plans() {
       notify(`Plan "${name}" deleted.`);
       await Promise.all([refreshPlans(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to delete plan.'));
+      notify(getErrorMessage(err, "Failed to delete plan."));
     }
   }
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-        <button className="provider-primary" onClick={() => setIsCreating(true)}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginBottom: "16px",
+        }}
+      >
+        <button
+          className="provider-primary"
+          onClick={() => setIsCreating(true)}
+        >
           <Plus size={17} /> Create plan
         </button>
       </div>
@@ -867,10 +1021,10 @@ function Plans() {
       <div className="provider-plan-cards">
         {plans.map((plan) => (
           <article
-            className={`provider-plan-card ${plan.name === 'Pro' ? 'featured' : ''}`}
+            className={`provider-plan-card ${plan.name === "Pro" ? "featured" : ""}`}
             key={plan.id}
           >
-            {plan.name === 'Pro' && (
+            {plan.name === "Pro" && (
               <span className="provider-popular">MOST POPULAR</span>
             )}
             <div className="provider-plan-top">
@@ -881,12 +1035,12 @@ function Plans() {
                   <small>/month</small>
                 </strong>
               </div>
-              <Status value={plan.active ? 'Active' : 'Inactive'} />
+              <Status value={plan.active ? "Active" : "Inactive"} />
             </div>
             <p>
               {plan.staffLimit
                 ? `Up to ${plan.staffLimit} staff members`
-                : 'Unlimited staff and locations'}
+                : "Unlimited staff and locations"}
             </p>
             <ul>
               {plan.features.map((feature) => (
@@ -898,7 +1052,9 @@ function Plans() {
             </ul>
             <div className="provider-plan-foot">
               <span>
-                {plan.tenantCount ?? tenants.filter((tenant) => tenant.plan === plan.name).length}{' '}
+                {plan.tenantCount ??
+                  tenants.filter((tenant) => tenant.plan === plan.name)
+                    .length}{" "}
                 tenants
               </span>
               <button onClick={() => setEditing({ ...plan })}>
@@ -924,7 +1080,6 @@ function Plans() {
               void save(editing);
             }}
           >
-
             <button
               type="button"
               className="provider-drawer-close"
@@ -951,7 +1106,7 @@ function Plans() {
               <input
                 type="number"
                 min="1"
-                value={editing.staffLimit ?? ''}
+                value={editing.staffLimit ?? ""}
                 placeholder="Unlimited"
                 onChange={(e) =>
                   setEditing({
@@ -968,11 +1123,15 @@ function Plans() {
                 onChange={(e) =>
                   setEditing({ ...editing, active: e.target.checked })
                 }
-              />{' '}
+              />{" "}
               Available for new subscriptions
             </label>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-              <button className="provider-primary" type="submit" style={{ flex: 1 }}>
+            <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+              <button
+                className="provider-primary"
+                type="submit"
+                style={{ flex: 1 }}
+              >
                 Save changes
               </button>
               <button
@@ -1012,7 +1171,9 @@ function Plans() {
                 required
                 placeholder="e.g. Enterprise"
                 value={newPlan.name}
-                onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
+                onChange={(e) =>
+                  setNewPlan({ ...newPlan, name: e.target.value })
+                }
               />
             </label>
             <label>
@@ -1022,7 +1183,9 @@ function Plans() {
                 min="0"
                 required
                 value={newPlan.price}
-                onChange={(e) => setNewPlan({ ...newPlan, price: Number(e.target.value) })}
+                onChange={(e) =>
+                  setNewPlan({ ...newPlan, price: Number(e.target.value) })
+                }
               />
             </label>
             <label>
@@ -1031,7 +1194,7 @@ function Plans() {
                 type="number"
                 min="1"
                 placeholder="Leave blank for unlimited"
-                value={newPlan.staffLimit ?? ''}
+                value={newPlan.staffLimit ?? ""}
                 onChange={(e) =>
                   setNewPlan({
                     ...newPlan,
@@ -1045,10 +1208,16 @@ function Plans() {
               <textarea
                 rows={4}
                 value={newPlan.featuresText}
-                onChange={(e) => setNewPlan({ ...newPlan, featuresText: e.target.value })}
+                onChange={(e) =>
+                  setNewPlan({ ...newPlan, featuresText: e.target.value })
+                }
               />
             </label>
-            <button className="provider-primary" type="submit" style={{ marginTop: '12px' }}>
+            <button
+              className="provider-primary"
+              type="submit"
+              style={{ marginTop: "12px" }}
+            >
               Create Tier
             </button>
           </form>
@@ -1069,7 +1238,7 @@ function Billing() {
     notify,
   } = useProviderState();
 
-  const [searchInput, setSearchInput] = useState(invoicesQuery.search ?? '');
+  const [searchInput, setSearchInput] = useState(invoicesQuery.search ?? "");
 
   // Debounce search
   useEffect(() => {
@@ -1083,19 +1252,26 @@ function Billing() {
   }, [searchInput, setInvoicesQuery]);
 
   const paidTotal = invoices
-    .filter((i) => i.status === 'PAID' || i.status === 'Paid')
+    .filter((i) => i.status === "PAID" || i.status === "Paid")
     .reduce((s, i) => s + i.amount, 0);
 
   const outstandingTotal = invoices
-    .filter((i) => i.status === 'DUE' || i.status === 'Due' || i.status === 'FAILED' || i.status === 'Failed')
+    .filter(
+      (i) =>
+        i.status === "DUE" ||
+        i.status === "Due" ||
+        i.status === "FAILED" ||
+        i.status === "Failed",
+    )
     .reduce((s, i) => s + i.amount, 0);
 
   const failedCount = invoices.filter(
-    (i) => i.status === 'FAILED' || i.status === 'Failed',
+    (i) => i.status === "FAILED" || i.status === "Failed",
   ).length;
 
   function handleFilterClick(statusFilter: string) {
-    const mapped = statusFilter === 'All' ? undefined : statusFilter.toUpperCase();
+    const mapped =
+      statusFilter === "All" ? undefined : statusFilter.toUpperCase();
     setInvoicesQuery((prev) => ({ ...prev, status: mapped, page: 1 }));
   }
 
@@ -1105,30 +1281,30 @@ function Billing() {
       notify(`Invoice ${invoice.id} marked as ${newStatus}.`);
       await refreshInvoices();
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to update invoice.'));
+      notify(getErrorMessage(err, "Failed to update invoice."));
     }
   }
 
-
   function exportCsv() {
     const csv = [
-      'Invoice,Tenant,Date,Plan,Amount,Status',
+      "Invoice,Tenant,Date,Plan,Amount,Status",
       ...invoices.map(
         (i) =>
           `${i.id},${i.tenant},${i.date},${i.plan},${i.amount},${i.status}`,
       ),
-    ].join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = 'serenity-invoices.csv';
+    ].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "serenity-invoices.csv";
     a.click();
     URL.revokeObjectURL(a.href);
-    notify('Invoice CSV exported.');
+    notify("Invoice CSV exported.");
   }
 
   const currentFilter = !invoicesQuery.status
-    ? 'All'
-    : invoicesQuery.status.charAt(0) + invoicesQuery.status.slice(1).toLowerCase();
+    ? "All"
+    : invoicesQuery.status.charAt(0) +
+      invoicesQuery.status.slice(1).toLowerCase();
 
   return (
     <>
@@ -1166,9 +1342,9 @@ function Billing() {
           />
         </label>
         <div className="provider-filters">
-          {['All', 'Paid', 'Due', 'Failed', 'Refunded'].map((item) => (
+          {["All", "Paid", "Due", "Failed", "Refunded"].map((item) => (
             <button
-              className={currentFilter === item ? 'active' : ''}
+              className={currentFilter === item ? "active" : ""}
               onClick={() => handleFilterClick(item)}
               key={item}
             >
@@ -1185,7 +1361,9 @@ function Billing() {
         <div className="provider-card-head">
           <div>
             <h2>Subscription invoices</h2>
-            <p>Showing {invoices.length} of {invoicesMeta.total} records</p>
+            <p>
+              Showing {invoices.length} of {invoicesMeta.total} records
+            </p>
           </div>
         </div>
         <div className="provider-table-wrap">
@@ -1218,12 +1396,14 @@ function Billing() {
                     <select
                       aria-label="Change invoice status"
                       value={invoice.status.toUpperCase()}
-                      onChange={(e) => handleStatusChange(invoice, e.target.value)}
+                      onChange={(e) =>
+                        handleStatusChange(invoice, e.target.value)
+                      }
                       style={{
-                        padding: '4px 8px',
-                        fontSize: '11px',
-                        borderRadius: '6px',
-                        border: '1px solid #d0d5dd',
+                        padding: "4px 8px",
+                        fontSize: "11px",
+                        borderRadius: "6px",
+                        border: "1px solid #d0d5dd",
                       }}
                     >
                       <option value="PAID">Paid</option>
@@ -1236,7 +1416,14 @@ function Billing() {
               ))}
               {invoices.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                  <td
+                    colSpan={7}
+                    style={{
+                      textAlign: "center",
+                      padding: "32px",
+                      color: "var(--muted)",
+                    }}
+                  >
                     No invoices match your current filter.
                   </td>
                 </tr>
@@ -1246,7 +1433,9 @@ function Billing() {
         </div>
         <Pagination
           meta={invoicesMeta}
-          onPageChange={(page) => setInvoicesQuery((prev) => ({ ...prev, page }))}
+          onPageChange={(page) =>
+            setInvoicesQuery((prev) => ({ ...prev, page }))
+          }
         />
       </section>
     </>
@@ -1264,7 +1453,7 @@ function Support() {
     notify,
   } = useProviderState();
 
-  const [searchInput, setSearchInput] = useState(ticketsQuery.search ?? '');
+  const [searchInput, setSearchInput] = useState(ticketsQuery.search ?? "");
   const [selected, setSelected] = useState<Ticket | null>(null);
 
   // Debounce search
@@ -1280,49 +1469,49 @@ function Support() {
 
   function handleFilterClick(statusFilter: string) {
     let mapped: string | undefined = undefined;
-    if (statusFilter === 'Open') mapped = 'OPEN';
-    else if (statusFilter === 'In progress') mapped = 'IN_PROGRESS';
-    else if (statusFilter === 'Waiting') mapped = 'WAITING';
-    else if (statusFilter === 'Resolved') mapped = 'RESOLVED';
+    if (statusFilter === "Open") mapped = "OPEN";
+    else if (statusFilter === "In progress") mapped = "IN_PROGRESS";
+    else if (statusFilter === "Waiting") mapped = "WAITING";
+    else if (statusFilter === "Resolved") mapped = "RESOLVED";
     setTicketsQuery((prev) => ({ ...prev, status: mapped, page: 1 }));
   }
 
   async function updateStatus(newStatus: string) {
     if (!selected) return;
     try {
-      const enumVal = newStatus.replace(/\s+/g, '_').toUpperCase();
+      const enumVal = newStatus.replace(/\s+/g, "_").toUpperCase();
       await updateTicket(selected.id, { status: enumVal });
       setSelected({ ...selected, status: newStatus, displayStatus: newStatus });
       notify(`${selected.id} status updated to ${newStatus.toLowerCase()}.`);
       await Promise.all([refreshTickets(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to update ticket.'));
+      notify(getErrorMessage(err, "Failed to update ticket."));
     }
   }
 
   async function removeTicket(ticketId: string) {
-    if (!window.confirm('Delete this support ticket?')) return;
+    if (!window.confirm("Delete this support ticket?")) return;
     try {
       await deleteTicket(ticketId);
       setSelected(null);
-      notify('Ticket deleted.');
+      notify("Ticket deleted.");
       await Promise.all([refreshTickets(), refreshAnalytics()]);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to delete ticket.'));
+      notify(getErrorMessage(err, "Failed to delete ticket."));
     }
   }
 
   const currentFilter = !ticketsQuery.status
-    ? 'All'
-    : ticketsQuery.status === 'OPEN'
-      ? 'Open'
-      : ticketsQuery.status === 'IN_PROGRESS'
-        ? 'In progress'
-        : ticketsQuery.status === 'WAITING'
-          ? 'Waiting'
-          : ticketsQuery.status === 'RESOLVED'
-            ? 'Resolved'
-            : 'All';
+    ? "All"
+    : ticketsQuery.status === "OPEN"
+      ? "Open"
+      : ticketsQuery.status === "IN_PROGRESS"
+        ? "In progress"
+        : ticketsQuery.status === "WAITING"
+          ? "Waiting"
+          : ticketsQuery.status === "RESOLVED"
+            ? "Resolved"
+            : "All";
 
   return (
     <>
@@ -1336,9 +1525,9 @@ function Support() {
           />
         </label>
         <div className="provider-filters">
-          {['Open', 'In progress', 'Waiting', 'Resolved', 'All'].map((item) => (
+          {["Open", "In progress", "Waiting", "Resolved", "All"].map((item) => (
             <button
-              className={currentFilter === item ? 'active' : ''}
+              className={currentFilter === item ? "active" : ""}
               onClick={() => handleFilterClick(item)}
               key={item}
             >
@@ -1367,7 +1556,13 @@ function Support() {
           </button>
         ))}
         {tickets.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '48px', color: 'var(--muted)' }}>
+          <div
+            style={{
+              textAlign: "center",
+              padding: "48px",
+              color: "var(--muted)",
+            }}
+          >
             No tickets found in this queue.
           </div>
         )}
@@ -1420,10 +1615,17 @@ function Support() {
                 <option value="Resolved">Resolved</option>
               </select>
             </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                marginTop: "16px",
+              }}
+            >
               <button
                 className="provider-primary"
-                onClick={() => updateStatus('Resolved')}
+                onClick={() => updateStatus("Resolved")}
               >
                 <Check size={17} /> Mark as Resolved
               </button>
@@ -1447,7 +1649,7 @@ function SettingsPage() {
   async function handleSaveSettings(draft: ProviderSettings) {
     const saved = await saveSettings(draft);
     setSettings(saved);
-    notify('Platform settings saved to cloud database.');
+    notify("Platform settings saved to cloud database.");
   }
 
   return (
@@ -1458,34 +1660,44 @@ function SettingsPage() {
         onSave={handleSaveSettings}
         notify={notify}
       />
-      <section className="provider-card provider-system">
-
-        <div className="provider-card-head">
-          <div>
-            <h2>System health</h2>
-            <p>Serenity Multi-Tenant Infrastructure</p>
-          </div>
-          <ShieldCheck size={22} />
-        </div>
-        {[
-          'Customer Booking Portal (SSR)',
-          'Salon Tenant Operations Dashboard',
-          'Super Admin Provider Platform API',
-          'Automated Scheduling & Double-Booking Guard',
-          'Loyalty Rewards Engine',
-          'PostgreSQL Isolated Multi-Tenant DB',
-        ].map((service) => (
-          <div key={service}>
-            <span>
-              <i />
-              {service}
-            </span>
-            <strong>Operational</strong>
-          </div>
-        ))}
-        <p>Real-time cluster monitoring · 99.99% uptime</p>
-      </section>
+      <HealthPanel />
     </div>
+  );
+}
+
+function HealthPanel() {
+  const [health, setHealth] = useState<{
+    status: string;
+    timestamp: string;
+  } | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    getHealth()
+      .then(setHealth)
+      .catch(() => setFailed(true));
+  }, []);
+  return (
+    <section className="provider-card provider-system">
+      <div className="provider-card-head">
+        <div>
+          <h2>System health</h2>
+          <p>Live API status</p>
+        </div>
+        <ShieldCheck size={22} />
+      </div>
+      <div>
+        <span>
+          <i />
+          Backend API
+        </span>
+        <strong>
+          {failed ? "Unavailable" : (health?.status ?? "Checking…")}
+        </strong>
+      </div>
+      {health && (
+        <p>Last checked {new Date(health.timestamp).toLocaleString()}</p>
+      )}
+    </section>
   );
 }
 
@@ -1507,7 +1719,7 @@ function SettingsForm({
     try {
       await onSave(draft);
     } catch (err: unknown) {
-      notify(getErrorMessage(err, 'Failed to save settings.'));
+      notify(getErrorMessage(err, "Failed to save settings."));
     } finally {
       setIsSaving(false);
     }
@@ -1525,9 +1737,7 @@ function SettingsForm({
         Platform name
         <input
           value={draft.platformName}
-          onChange={(e) =>
-            setDraft({ ...draft, platformName: e.target.value })
-          }
+          onChange={(e) => setDraft({ ...draft, platformName: e.target.value })}
         />
       </label>
       <label>
@@ -1535,9 +1745,7 @@ function SettingsForm({
         <input
           type="email"
           value={draft.supportEmail}
-          onChange={(e) =>
-            setDraft({ ...draft, supportEmail: e.target.value })
-          }
+          onChange={(e) => setDraft({ ...draft, supportEmail: e.target.value })}
         />
       </label>
       <label>
@@ -1576,7 +1784,7 @@ function SettingsForm({
         onChange={(value) => setDraft({ ...draft, billingEmails: value })}
       />
       <button className="provider-primary" type="submit" disabled={isSaving}>
-        {isSaving ? 'Saving...' : 'Save settings'}
+        {isSaving ? "Saving..." : "Save settings"}
       </button>
     </form>
   );

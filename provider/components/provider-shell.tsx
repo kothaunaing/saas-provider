@@ -1,7 +1,8 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import {
   BarChart3,
   Building2,
@@ -13,36 +14,55 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-} from 'lucide-react';
-import { useState } from 'react';
-import { useProviderState } from './provider-state';
-import { ProviderLoginPage } from './login';
+} from "lucide-react";
+import { useState } from "react";
+import { useProviderState } from "./provider-state";
+// ProviderLoginPage is only rendered at /login — not inline in the shell.
 
 const navigation = [
-  { label: 'Overview', href: '/', icon: BarChart3 },
-  { label: 'Tenants', href: '/tenants', icon: Building2 },
-  { label: 'Plans', href: '/plans', icon: CreditCard },
-  { label: 'Billing', href: '/billing', icon: CircleDollarSign },
-  { label: 'Support', href: '/support', icon: Headphones },
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: "Overview", href: "/", icon: BarChart3 },
+  { label: "Tenants", href: "/tenants", icon: Building2 },
+  { label: "Plans", href: "/plans", icon: CreditCard },
+  { label: "Billing", href: "/billing", icon: CircleDollarSign },
+  { label: "Support", href: "/support", icon: Headphones },
+  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Errors", href: "/errors", icon: ShieldCheck },
 ];
 
 export function ProviderShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const { user, isLoadingUser, logoutUser, tickets, settings } =
     useProviderState();
 
-  if (isLoadingUser) {
+  // Second-layer guard: if auth resolved and user is not a PLATFORM_ADMIN,
+  // send to /login. The edge middleware already blocks unauthenticated requests;
+  // this handles the case where someone has a valid session with the wrong role.
+  useEffect(() => {
+    if (
+      pathname !== "/login" &&
+      !isLoadingUser &&
+      (!user || user.role !== "PLATFORM_ADMIN")
+    ) {
+      router.replace("/login");
+    }
+  }, [pathname, isLoadingUser, user, router]);
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
+
+  if (isLoadingUser || !user) {
     return (
       <div
         style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#f8fafc',
-          color: '#64748b',
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#f8fafc",
+          color: "#64748b",
           fontSize: 14,
           fontWeight: 500,
         }}
@@ -52,29 +72,24 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
-    return <ProviderLoginPage />;
-  }
-
   const openTickets = tickets.filter(
-    (ticket) =>
-      ticket.status !== 'Resolved' && ticket.status !== 'RESOLVED',
+    (ticket) => ticket.status !== "Resolved" && ticket.status !== "RESOLVED",
   ).length;
 
   const current =
     navigation.find((item) => item.href === pathname)?.label ??
-    'Provider console';
+    "Provider console";
 
   const userInitials = user.name
-    .split(' ')
+    .split(" ")
     .map((n) => n[0])
     .slice(0, 2)
-    .join('')
+    .join("")
     .toUpperCase();
 
   return (
     <div className="provider-app">
-      <aside className={`provider-sidebar ${open ? 'is-open' : ''}`}>
+      <aside className={`provider-sidebar ${open ? "is-open" : ""}`}>
         <div className="provider-brand">
           <span>
             <Sparkles size={18} />
@@ -93,12 +108,12 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={active ? 'active' : ''}
+                className={active ? "active" : ""}
                 onClick={() => setOpen(false)}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
-                {item.label === 'Support' && openTickets > 0 && (
+                {item.label === "Support" && openTickets > 0 && (
                   <b>{openTickets}</b>
                 )}
               </Link>
@@ -114,12 +129,24 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
             </span>
           </div>
           <div className="provider-user">
-            <span>{userInitials || 'AD'}</span>
+            <span>{userInitials || "AD"}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <strong
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 {user.name}
               </strong>
-              <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <small
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 {user.email}
               </small>
             </div>
@@ -129,13 +156,13 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
               title="Sign Out"
               aria-label="Sign Out"
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#98a2b3',
-                cursor: 'pointer',
+                background: "none",
+                border: "none",
+                color: "#98a2b3",
+                cursor: "pointer",
                 padding: 4,
-                display: 'flex',
-                alignItems: 'center',
+                display: "flex",
+                alignItems: "center",
               }}
             >
               <LogOut size={16} />
@@ -164,11 +191,11 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
             <small>Serenity Cloud Super Administration</small>
           </div>
           <span
-            className="provider-demo"
+            className="provider-mode"
             style={{
-              background: '#ecfdf5',
-              borderColor: '#a7f3d0',
-              color: '#047857',
+              background: "#ecfdf5",
+              borderColor: "#a7f3d0",
+              color: "#047857",
             }}
           >
             ● LIVE CLOUD
@@ -184,7 +211,8 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
         </header>
         {settings.maintenanceMode && (
           <div className="provider-maintenance">
-            Maintenance mode is enabled. New bookings are temporarily paused across all salons.
+            Maintenance mode is enabled. New bookings are temporarily paused
+            across all salons.
           </div>
         )}
         <div className="provider-content">{children}</div>

@@ -1,24 +1,17 @@
-import { api, type PaginatedResult, type PaginationParams } from './client';
+import { api, type PaginatedResult, type PaginationParams } from "./client";
 
 export type TicketStatus =
-  | 'OPEN'
-  | 'IN_PROGRESS'
-  | 'WAITING'
-  | 'RESOLVED'
-  | 'Open'
-  | 'In progress'
-  | 'Waiting'
-  | 'Resolved';
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "WAITING"
+  | "RESOLVED"
+  | "Open"
+  | "In progress"
+  | "Waiting"
+  | "Resolved";
 
 export type TicketPriority =
-  | 'LOW'
-  | 'NORMAL'
-  | 'HIGH'
-  | 'URGENT'
-  | 'Low'
-  | 'Normal'
-  | 'High'
-  | 'Urgent';
+  "LOW" | "NORMAL" | "HIGH" | "URGENT" | "Low" | "Normal" | "High" | "Urgent";
 
 export type Ticket = {
   id: string;
@@ -80,14 +73,14 @@ export async function getTickets(
   params?: QueryTicketsParams,
 ): Promise<PaginatedResult<Ticket>> {
   const res = await api.get<PaginatedResult<RawTicketResponse>>(
-    '/platform/tickets',
+    "/platform/tickets",
     { params },
   );
   return {
     data: res.data.data.map((item) => ({
       id: item.id,
       tenantId: item.tenantId,
-      tenant: item.tenantName ?? item.tenant ?? '',
+      tenant: item.tenantName ?? item.tenant ?? "",
       tenantName: item.tenantName,
       tenantEmail: item.tenantEmail,
       subject: item.subject,
@@ -96,7 +89,7 @@ export async function getTickets(
       displayPriority: item.displayPriority,
       status: item.status,
       displayStatus: item.displayStatus,
-      created: item.created ?? '',
+      created: item.created ?? "",
       message: item.message,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
@@ -108,7 +101,7 @@ export async function getTickets(
 export async function createTicket(
   payload: CreateTicketPayload,
 ): Promise<Ticket> {
-  const res = await api.post<Ticket>('/platform/tickets', payload);
+  const res = await api.post<Ticket>("/platform/tickets", payload);
   return res.data;
 }
 

@@ -1,6 +1,7 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   LockKeyhole,
@@ -11,32 +12,46 @@ import {
   ArrowRight,
   Loader2,
   ShieldCheck,
-} from 'lucide-react';
-import { login, logout, apiError } from '@/provider/lib/api';
-import { useProviderState } from './provider-state';
+} from "lucide-react";
+import { login, logout, apiError } from "@/provider/lib/api";
+import { useProviderState } from "./provider-state";
 
 export function ProviderLoginPage() {
-  const { setUser, notify } = useProviderState();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const router = useRouter();
+  const { user, setUser, notify } = useProviderState();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // If already authenticated as PLATFORM_ADMIN, forward to dashboard
+  useEffect(() => {
+    if (user && user.role === "PLATFORM_ADMIN") {
+      router.replace("/");
+    }
+  }, [user, router]);
 
   async function submit(event: React.SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim() || !password) {
-      setError('Please provide your admin email and password.');
+      setError("Please provide your admin email and password.");
       return;
     }
     setSaving(true);
-    setError('');
+    setError("");
     try {
       const authUser = await login(email.trim().toLowerCase(), password);
-      if (authUser.role !== 'PLATFORM_ADMIN') {
+      if (authUser.role !== "PLATFORM_ADMIN") {
         await logout();
+        const portalHint =
+          authUser.role === "TENANT_ADMIN"
+            ? " Use the Tenant Dashboard instead."
+            : authUser.role === "CUSTOMER"
+              ? " Use the Customer Portal instead."
+              : "";
         throw new Error(
-          'Access denied. This console requires a Platform Super Admin account.',
+          `Access denied. This console requires a Platform Super Admin account.${portalHint}`,
         );
       }
       setUser(authUser);
@@ -45,7 +60,7 @@ export function ProviderLoginPage() {
       setError(
         apiError(
           cause,
-          'Invalid credentials. Please verify your admin email and password.',
+          "Invalid credentials. Please verify your admin email and password.",
         ),
       );
     } finally {
@@ -102,7 +117,7 @@ export function ProviderLoginPage() {
               </span>
               <input
                 id="admin-password"
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
                 placeholder="••••••••••••"
@@ -113,7 +128,7 @@ export function ProviderLoginPage() {
                 type="button"
                 className="pwd-toggle"
                 onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
