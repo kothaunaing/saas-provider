@@ -14,22 +14,47 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
-import type {
-  Plan,
-  Tenant,
-  TenantStatus,
-  Ticket,
-} from '@/provider/lib/provider-data';
-import { getProviderMetrics, money } from '@/provider/lib/provider-utils';
+import { useEffect, useState } from 'react';
+import {
+  type Tenant,
+  type Plan,
+  type Invoice,
+  type Ticket,
+  type ProviderSettings,
+  createTenant,
+  updateTenant,
+  deleteTenant,
+  createPlan,
+  updatePlan,
+  deletePlan,
+  updateInvoice,
+  updateTicket,
+  deleteTicket,
+  saveSettings,
+} from '@/provider/lib/api';
+import { money } from '@/provider/lib/provider-utils';
 import { useProviderState } from './provider-state';
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (
+    err &&
+    typeof err === 'object' &&
+    'response' in err &&
+    (err as { response?: { data?: { message?: string } } }).response?.data?.message
+  ) {
+    return String((err as { response?: { data?: { message?: string } } }).response?.data?.message);
+  }
+  return fallback;
+}
 
 export const providerViews = [
   'overview',
   'tenants',
+
   'plans',
   'billing',
   'support',
@@ -134,50 +159,106 @@ function Metric({
 }
 
 function Status({ value }: { value: string }) {
+  const normalized = value.toLowerCase().replace(/\s+/g, '-');
   return (
-    <span
-      className={`provider-status status-${value.toLowerCase().replace(' ', '-')}`}
-    >
+    <span className={`provider-status status-${normalized}`}>
       <i />
       {value}
     </span>
   );
 }
 
+function Pagination({
+  meta,
+  onPageChange,
+}: {
+  meta: { total: number; page: number; size: number; totalPages: number };
+  onPageChange: (newPage: number) => void;
+}) {
+  if (!meta || meta.total === 0) return null;
+  const start = (meta.page - 1) * meta.size + 1;
+  const end = Math.min(meta.page * meta.size, meta.total);
+
+  return (
+    <div className="provider-pagination">
+      <div className="provider-pagination-info">
+        Showing <strong>{start}</strong> to <strong>{end}</strong> of{' '}
+        <strong>{meta.total}</strong> records
+      </div>
+      <div className="provider-pagination-actions">
+        <button
+          type="button"
+          className="provider-page-btn"
+          disabled={meta.page <= 1}
+          onClick={() => onPageChange(meta.page - 1)}
+        >
+          Previous
+        </button>
+        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+          Page {meta.page} of {Math.max(1, meta.totalPages)}
+        </span>
+        <button
+          type="button"
+          className="provider-page-btn"
+          disabled={meta.page >= meta.totalPages}
+          onClick={() => onPageChange(meta.page + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Overview() {
-  const { tenants, invoices, tickets } = useProviderState();
-  const metrics = getProviderMetrics(tenants, invoices, tickets);
-  const recent = tenants.slice(0, 5);
-  const starter = tenants.filter((t) => t.plan === 'Starter').length;
-  const pro = tenants.filter((t) => t.plan === 'Pro').length;
-  const business = tenants.filter((t) => t.plan === 'Business').length;
+  const { analytics, tenants } = useProviderState();
+
+  const activeTenants = analytics ? analytics.activeTenants : tenants.length;
+  const mrr = analytics ? analytics.mrr : 0;
+  const bookings = analytics ? analytics.bookings : 0;
+  const openTickets = analytics ? analytics.openTickets : 0;
+
+  const starter =
+    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === 'starter')?.count ?? 0;
+  const pro =
+    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === 'pro')?.count ?? 0;
+  const business =
+    analytics?.planDistribution?.find((p) => p.name.toLowerCase() === 'business')?.count ?? 0;
+  const totalPlans =
+    analytics?.planDistribution?.reduce((sum, p) => sum + p.count, 0) || 1;
+
+  const recent = (analytics?.recentTenants && analytics.recentTenants.length > 0)
+    ? analytics.recentTenants
+    : tenants.slice(0, 5);
+
+
   return (
     <>
       <div className="provider-metrics">
         <Metric
           label="Active tenants"
-          value={String(metrics.activeTenants)}
-          note="2 joined this month"
+          value={String(activeTenants)}
+          note="Live businesses on platform"
           icon={Building2}
         />
         <Metric
           label="Monthly recurring revenue"
-          value={money(metrics.mrr)}
-          note="↗ 12.4% from last month"
+          value={money(mrr)}
+          note="Platform recurring subscription total"
           icon={CircleDollarSign}
           tone="green"
         />
         <Metric
-          label="Bookings this month"
-          value={metrics.bookings.toLocaleString()}
-          note="Across all workspaces"
+          label="Bookings total"
+          value={bookings.toLocaleString()}
+          note="Across all tenant workspaces"
           icon={Activity}
           tone="blue"
         />
         <Metric
           label="Open support tickets"
-          value={String(metrics.openTickets)}
-          note="1 urgent ticket"
+          value={String(openTickets)}
+          note="Active support inquiries"
           icon={Headphones}
           tone="orange"
         />
@@ -240,24 +321,24 @@ function Overview() {
             <Mix
               label="Business"
               count={business}
-              total={tenants.length}
+              total={totalPlans}
               color="purple"
             />
-            <Mix label="Pro" count={pro} total={tenants.length} color="blue" />
+            <Mix label="Pro" count={pro} total={totalPlans} color="blue" />
             <Mix
               label="Starter"
               count={starter}
-              total={tenants.length}
+              total={totalPlans}
               color="green"
             />
           </div>
           <div className="provider-trial-box">
             <Sparkles size={18} />
             <div>
-              <strong>Trial conversion</strong>
-              <span>68% of trials upgrade in 14 days</span>
+              <strong>Live Platform Health</strong>
+              <span>All multi-tenant services operational</span>
             </div>
-            <b>68%</b>
+            <b>100%</b>
           </div>
         </section>
       </div>
@@ -288,6 +369,7 @@ function Mix({
   total: number;
   color: string;
 }) {
+  const percentage = total > 0 ? (count / total) * 100 : 0;
   return (
     <div className="provider-mix">
       <div>
@@ -295,18 +377,32 @@ function Mix({
         <b>{count} tenants</b>
       </div>
       <div>
-        <i className={color} style={{ width: `${(count / total) * 100}%` }} />
+        <i className={color} style={{ width: `${percentage}%` }} />
       </div>
     </div>
   );
 }
 
+type TenantTableRow = {
+  id: string;
+  name: string;
+  owner: string;
+  city: string;
+  plan: string;
+  status: string;
+  displayStatus?: string;
+  joined?: string;
+  staff?: number;
+  bookings?: number;
+  lastActive?: string;
+};
+
 function TenantTable({
   rows,
   onSelect,
 }: {
-  rows: Tenant[];
-  onSelect?: (tenant: Tenant) => void;
+  rows: (Tenant | TenantTableRow)[];
+  onSelect?: (tenant: Tenant | TenantTableRow) => void;
 }) {
   return (
     <div className="provider-table-wrap">
@@ -332,7 +428,7 @@ function TenantTable({
               <td aria-label="Tenant account">
                 <div className="provider-tenant-cell">
                   <span>
-                    {tenant.name
+                    {(tenant.name || 'Tenant')
                       .split(' ')
                       .map((x) => x[0])
                       .slice(0, 2)
@@ -348,16 +444,23 @@ function TenantTable({
               </td>
               <td>{tenant.plan}</td>
               <td>
-                <Status value={tenant.status} />
+                <Status value={tenant.displayStatus || tenant.status} />
               </td>
-              <td>{tenant.staff}</td>
-              <td>{tenant.bookings}</td>
-              <td>{tenant.lastActive}</td>
+              <td>{tenant.staff ?? '—'}</td>
+              <td>{tenant.bookings ?? '—'}</td>
+              <td>{tenant.lastActive ?? 'Recently'}</td>
               <td>
                 <ChevronRight size={16} />
               </td>
             </tr>
           ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                No tenants found matching your search.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -365,59 +468,110 @@ function TenantTable({
 }
 
 function Tenants() {
-  const { tenants, setTenants, notify } = useProviderState();
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('All');
+  const {
+    tenants,
+    tenantsMeta,
+    tenantsQuery,
+    setTenantsQuery,
+    refreshTenants,
+    refreshAnalytics,
+    plans,
+    notify,
+  } = useProviderState();
+
+  const [searchInput, setSearchInput] = useState(tenantsQuery.search ?? '');
   const [selected, setSelected] = useState<Tenant | null>(null);
-  const rows = tenants.filter(
-    (tenant) =>
-      (filter === 'All' || tenant.status === filter) &&
-      `${tenant.name} ${tenant.owner} ${tenant.email}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
-  function changeStatus(tenant: Tenant, status: TenantStatus) {
-    setTenants((all) =>
-      all.map((item) =>
-        item.id === tenant.id
-          ? {
-              ...item,
-              status,
-              mrr:
-                status === 'Active'
-                  ? ({ Starter: 19, Pro: 49, Business: 99 }[item.plan] ?? 0)
-                  : 0,
-            }
-          : item,
-      ),
-    );
-    setSelected({ ...tenant, status });
-    notify(`${tenant.name} is now ${status.toLowerCase()}.`);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTenant, setNewTenant] = useState({
+    name: '',
+    slug: '',
+    ownerName: '',
+    email: '',
+    city: '',
+    planId: '',
+  });
+
+  // Debounce search input to server query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTenantsQuery((prev) => {
+        if (prev.search === (searchInput || undefined)) return prev;
+        return { ...prev, search: searchInput || undefined, page: 1 };
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput, setTenantsQuery]);
+
+  function handleFilterClick(statusFilter: string) {
+    const mapped = statusFilter === 'All' ? undefined : statusFilter.toUpperCase();
+    setTenantsQuery((prev) => ({ ...prev, status: mapped, page: 1 }));
   }
-  function removeTenant(tenant: Tenant) {
-    if (window.confirm(`Remove ${tenant.name} from this demo?`)) {
-      setTenants((all) => all.filter((item) => item.id !== tenant.id));
+
+  async function changeStatus(tenant: Tenant, status: string) {
+    try {
+      await updateTenant(tenant.id, { status: status.toUpperCase() });
+      notify(`${tenant.name} is now ${status.toLowerCase()}.`);
       setSelected(null);
-      notify('Tenant removed from demo data.');
+      await Promise.all([refreshTenants(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to update tenant status.'));
     }
   }
+
+  async function removeTenant(tenant: Tenant) {
+    if (window.confirm(`Permanently remove ${tenant.name} from the platform?`)) {
+      try {
+        await deleteTenant(tenant.id);
+        setSelected(null);
+        notify(`${tenant.name} was removed.`);
+        await Promise.all([refreshTenants(), refreshAnalytics()]);
+      } catch (err: unknown) {
+        notify(getErrorMessage(err, 'Failed to delete tenant.'));
+      }
+    }
+  }
+
+  async function handleCreateTenant(e: React.SyntheticEvent) {
+    e.preventDefault();
+    if (!newTenant.name || !newTenant.slug || !newTenant.email || !newTenant.ownerName) {
+      notify('Please fill out all required fields.');
+      return;
+    }
+    try {
+      await createTenant({
+        ...newTenant,
+        planId: newTenant.planId || (plans[0]?.id ?? undefined),
+      });
+      setIsCreating(false);
+      setNewTenant({ name: '', slug: '', ownerName: '', email: '', city: '', planId: '' });
+      notify(`Tenant "${newTenant.name}" registered successfully.`);
+      await Promise.all([refreshTenants(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to create tenant.'));
+    }
+  }
+
+  const currentFilter = !tenantsQuery.status
+    ? 'All'
+    : tenantsQuery.status.charAt(0) + tenantsQuery.status.slice(1).toLowerCase();
+
   return (
     <>
       <div className="provider-toolbar">
         <label className="provider-search">
           <Search size={17} />
           <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tenants, owners, or email"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search tenants by name, owner, or email"
           />
         </label>
         <div className="provider-filters">
           {['All', 'Active', 'Trial', 'Pending', 'Suspended'].map((item) => (
             <button
-              className={filter === item ? 'active' : ''}
+              className={currentFilter === item ? 'active' : ''}
               key={item}
-              onClick={() => setFilter(item)}
+              onClick={() => handleFilterClick(item)}
             >
               {item}
             </button>
@@ -425,22 +579,29 @@ function Tenants() {
         </div>
         <button
           className="provider-primary"
-          onClick={() => notify('Tenant invitation draft created.')}
+          onClick={() => setIsCreating(true)}
         >
-          <Plus size={17} /> Invite tenant
+          <Plus size={17} /> Add tenant
         </button>
       </div>
+
       <section className="provider-card provider-table-card">
         <div className="provider-card-head">
           <div>
             <h2>All tenants</h2>
             <p>
-              {rows.length} of {tenants.length} accounts shown
+              Showing {tenants.length} of {tenantsMeta.total} accounts
             </p>
           </div>
         </div>
-        <TenantTable rows={rows} onSelect={setSelected} />
+        <TenantTable rows={tenants} onSelect={(item) => setSelected(item as Tenant)} />
+        <Pagination
+          meta={tenantsMeta}
+          onPageChange={(page) => setTenantsQuery((prev) => ({ ...prev, page }))}
+        />
       </section>
+
+      {/* Tenant Details Drawer */}
       {selected && (
         <dialog
           open
@@ -467,7 +628,7 @@ function Tenants() {
             <p>
               {selected.city} · Joined {selected.joined}
             </p>
-            <Status value={selected.status} />
+            <Status value={selected.displayStatus || selected.status} />
             <div className="provider-detail-grid">
               <Detail label="Owner" value={selected.owner} />
               <Detail label="Email" value={selected.email} />
@@ -477,7 +638,7 @@ function Tenants() {
               <Detail label="Bookings" value={String(selected.bookings)} />
             </div>
             <div className="provider-drawer-actions">
-              {selected.status === 'Pending' && (
+              {(selected.status === 'PENDING' || selected.status === 'Pending') && (
                 <button
                   className="provider-primary"
                   onClick={() => changeStatus(selected, 'Active')}
@@ -485,7 +646,7 @@ function Tenants() {
                   <Check size={17} /> Approve tenant
                 </button>
               )}
-              {selected.status === 'Suspended' ? (
+              {selected.status === 'SUSPENDED' || selected.status === 'Suspended' ? (
                 <button
                   className="provider-primary"
                   onClick={() => changeStatus(selected, 'Active')}
@@ -493,7 +654,7 @@ function Tenants() {
                   Reactivate account
                 </button>
               ) : (
-                selected.status !== 'Pending' && (
+                selected.status !== 'PENDING' && selected.status !== 'Pending' && (
                   <button
                     className="provider-secondary"
                     onClick={() => changeStatus(selected, 'Suspended')}
@@ -506,10 +667,109 @@ function Tenants() {
                 className="provider-danger"
                 onClick={() => removeTenant(selected)}
               >
-                Delete demo tenant
+                Delete tenant
               </button>
             </div>
           </aside>
+        </dialog>
+      )}
+
+      {/* Create Tenant Modal */}
+      {isCreating && (
+        <dialog open className="provider-modal-layer" aria-label="Add tenant">
+          <button
+            className="provider-drawer-scrim"
+            onClick={() => setIsCreating(false)}
+            aria-label="Close dialog"
+          />
+          <form className="provider-modal" onSubmit={handleCreateTenant}>
+            <button
+              type="button"
+              className="provider-drawer-close"
+              onClick={() => setIsCreating(false)}
+            >
+              <X size={18} />
+              <span className="sr-only">Close</span>
+            </button>
+            <h2>Onboard New Tenant</h2>
+            <p>Create a dedicated salon/spa workspace on Serenity Cloud.</p>
+
+            <label>
+              Business Name *
+              <input
+                required
+                placeholder="e.g. Lotus Wellness Spa"
+                value={newTenant.name}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewTenant((prev) => ({
+                    ...prev,
+                    name: val,
+                    slug: prev.slug || val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+                  }));
+                }}
+              />
+            </label>
+
+            <label>
+              Subdomain / URL Slug *
+              <input
+                required
+                placeholder="e.g. lotus-wellness"
+                value={newTenant.slug}
+                onChange={(e) => setNewTenant({ ...newTenant, slug: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Owner Full Name *
+              <input
+                required
+                placeholder="e.g. Sophia Lin"
+                value={newTenant.ownerName}
+                onChange={(e) => setNewTenant({ ...newTenant, ownerName: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Owner Email *
+              <input
+                type="email"
+                required
+                placeholder="e.g. owner@lotuswellness.com"
+                value={newTenant.email}
+                onChange={(e) => setNewTenant({ ...newTenant, email: e.target.value })}
+              />
+            </label>
+
+            <label>
+              City / Location
+              <input
+                placeholder="e.g. San Francisco, CA"
+                value={newTenant.city}
+                onChange={(e) => setNewTenant({ ...newTenant, city: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Subscription Tier
+              <select
+                value={newTenant.planId}
+                onChange={(e) => setNewTenant({ ...newTenant, planId: e.target.value })}
+              >
+                <option value="">Select a plan</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({money(p.price)}/mo)
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button className="provider-primary" type="submit" style={{ marginTop: '14px' }}>
+              Create Tenant
+            </button>
+          </form>
         </dialog>
       )}
     </>
@@ -526,15 +786,84 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function Plans() {
-  const { plans, setPlans, tenants, notify } = useProviderState();
+  const { plans, refreshPlans, refreshAnalytics, tenants, notify } = useProviderState();
   const [editing, setEditing] = useState<Plan | null>(null);
-  function save(plan: Plan) {
-    setPlans((all) => all.map((item) => (item.id === plan.id ? plan : item)));
-    setEditing(null);
-    notify(`${plan.name} plan updated.`);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newPlan, setNewPlan] = useState({
+    name: '',
+    price: 49,
+    staffLimit: 10 as number | null,
+    featuresText: 'Online appointment booking\nStaff schedule sync\nLoyalty program engine',
+  });
+
+  async function save(plan: Plan) {
+    try {
+      await updatePlan(plan.id, {
+        price: plan.price,
+        staffLimit: plan.staffLimit ?? undefined,
+        active: plan.active,
+      });
+      setEditing(null);
+      notify(`${plan.name} plan updated.`);
+      await Promise.all([refreshPlans(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to update plan.'));
+    }
   }
+
+  async function handleCreatePlan(e: React.SyntheticEvent) {
+    e.preventDefault();
+    if (!newPlan.name) {
+      notify('Plan name is required.');
+      return;
+    }
+    try {
+      const features = newPlan.featuresText
+        .split('\n')
+        .map((f) => f.trim())
+        .filter(Boolean);
+      await createPlan({
+        name: newPlan.name,
+        price: Number(newPlan.price),
+        interval: 'month',
+        staffLimit: newPlan.staffLimit ? Number(newPlan.staffLimit) : undefined,
+        features,
+        active: true,
+      });
+      setIsCreating(false);
+      setNewPlan({
+        name: '',
+        price: 49,
+        staffLimit: 10,
+        featuresText: 'Online appointment booking\nStaff schedule sync\nLoyalty program engine',
+      });
+      notify(`Plan "${newPlan.name}" created successfully.`);
+      await Promise.all([refreshPlans(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to create plan.'));
+    }
+  }
+
+  async function handleDeletePlan(planId: string, name: string) {
+    if (!window.confirm(`Delete plan "${name}"?`)) return;
+    try {
+      await deletePlan(planId);
+      setEditing(null);
+      notify(`Plan "${name}" deleted.`);
+      await Promise.all([refreshPlans(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to delete plan.'));
+    }
+  }
+
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+        <button className="provider-primary" onClick={() => setIsCreating(true)}>
+          <Plus size={17} /> Create plan
+        </button>
+      </div>
+
       <div className="provider-plan-cards">
         {plans.map((plan) => (
           <article
@@ -569,7 +898,7 @@ function Plans() {
             </ul>
             <div className="provider-plan-foot">
               <span>
-                {tenants.filter((tenant) => tenant.plan === plan.name).length}{' '}
+                {plan.tenantCount ?? tenants.filter((tenant) => tenant.plan === plan.name).length}{' '}
                 tenants
               </span>
               <button onClick={() => setEditing({ ...plan })}>
@@ -579,6 +908,8 @@ function Plans() {
           </article>
         ))}
       </div>
+
+      {/* Edit Plan Modal */}
       {editing && (
         <dialog open className="provider-modal-layer" aria-label="Plan editor">
           <button
@@ -590,9 +921,10 @@ function Plans() {
             className="provider-modal"
             onSubmit={(e) => {
               e.preventDefault();
-              save(editing);
+              void save(editing);
             }}
           >
+
             <button
               type="button"
               className="provider-drawer-close"
@@ -602,9 +934,9 @@ function Plans() {
               <span className="sr-only">Close</span>
             </button>
             <h2>Edit {editing.name}</h2>
-            <p>Changes apply to this demo plan immediately.</p>
+            <p>Changes take effect immediately across Serenity Cloud.</p>
             <label>
-              Monthly price
+              Monthly price ($)
               <input
                 type="number"
                 min="0"
@@ -639,8 +971,85 @@ function Plans() {
               />{' '}
               Available for new subscriptions
             </label>
-            <button className="provider-primary" type="submit">
-              Save changes
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+              <button className="provider-primary" type="submit" style={{ flex: 1 }}>
+                Save changes
+              </button>
+              <button
+                type="button"
+                className="provider-danger"
+                onClick={() => handleDeletePlan(editing.id, editing.name)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </form>
+        </dialog>
+      )}
+
+      {/* Create Plan Modal */}
+      {isCreating && (
+        <dialog open className="provider-modal-layer" aria-label="Create Plan">
+          <button
+            className="provider-drawer-scrim"
+            onClick={() => setIsCreating(false)}
+            aria-label="Close dialog"
+          />
+          <form className="provider-modal" onSubmit={handleCreatePlan}>
+            <button
+              type="button"
+              className="provider-drawer-close"
+              onClick={() => setIsCreating(false)}
+            >
+              <X size={18} />
+              <span className="sr-only">Close</span>
+            </button>
+            <h2>New Subscription Tier</h2>
+            <p>Create a subscription package for prospective salons & spas.</p>
+            <label>
+              Tier Name *
+              <input
+                required
+                placeholder="e.g. Enterprise"
+                value={newPlan.name}
+                onChange={(e) => setNewPlan({ ...newPlan, name: e.target.value })}
+              />
+            </label>
+            <label>
+              Monthly Price ($) *
+              <input
+                type="number"
+                min="0"
+                required
+                value={newPlan.price}
+                onChange={(e) => setNewPlan({ ...newPlan, price: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              Staff Limit
+              <input
+                type="number"
+                min="1"
+                placeholder="Leave blank for unlimited"
+                value={newPlan.staffLimit ?? ''}
+                onChange={(e) =>
+                  setNewPlan({
+                    ...newPlan,
+                    staffLimit: e.target.value ? Number(e.target.value) : null,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Features (one per line)
+              <textarea
+                rows={4}
+                value={newPlan.featuresText}
+                onChange={(e) => setNewPlan({ ...newPlan, featuresText: e.target.value })}
+              />
+            </label>
+            <button className="provider-primary" type="submit" style={{ marginTop: '12px' }}>
+              Create Tier
             </button>
           </form>
         </dialog>
@@ -650,23 +1059,63 @@ function Plans() {
 }
 
 function Billing() {
-  const { invoices, tenants, notify } = useProviderState();
-  const [filter, setFilter] = useState('All');
-  const rows = invoices.filter(
-    (invoice) => filter === 'All' || invoice.status === filter,
-  );
-  const paid = invoices
-    .filter((i) => i.status === 'Paid')
+  const {
+    invoices,
+    invoicesMeta,
+    invoicesQuery,
+    setInvoicesQuery,
+    refreshInvoices,
+    analytics,
+    notify,
+  } = useProviderState();
+
+  const [searchInput, setSearchInput] = useState(invoicesQuery.search ?? '');
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setInvoicesQuery((prev) => {
+        if (prev.search === (searchInput || undefined)) return prev;
+        return { ...prev, search: searchInput || undefined, page: 1 };
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput, setInvoicesQuery]);
+
+  const paidTotal = invoices
+    .filter((i) => i.status === 'PAID' || i.status === 'Paid')
     .reduce((s, i) => s + i.amount, 0);
-  const outstanding = invoices
-    .filter((i) => i.status === 'Due' || i.status === 'Failed')
+
+  const outstandingTotal = invoices
+    .filter((i) => i.status === 'DUE' || i.status === 'Due' || i.status === 'FAILED' || i.status === 'Failed')
     .reduce((s, i) => s + i.amount, 0);
+
+  const failedCount = invoices.filter(
+    (i) => i.status === 'FAILED' || i.status === 'Failed',
+  ).length;
+
+  function handleFilterClick(statusFilter: string) {
+    const mapped = statusFilter === 'All' ? undefined : statusFilter.toUpperCase();
+    setInvoicesQuery((prev) => ({ ...prev, status: mapped, page: 1 }));
+  }
+
+  async function handleStatusChange(invoice: Invoice, newStatus: string) {
+    try {
+      await updateInvoice(invoice.id, newStatus.toUpperCase());
+      notify(`Invoice ${invoice.id} marked as ${newStatus}.`);
+      await refreshInvoices();
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to update invoice.'));
+    }
+  }
+
+
   function exportCsv() {
     const csv = [
       'Invoice,Tenant,Date,Plan,Amount,Status',
-      ...rows.map(
+      ...invoices.map(
         (i) =>
-          `${i.id},${tenants.find((t) => t.id === i.tenantId)?.name},${i.date},${i.plan},${i.amount},${i.status}`,
+          `${i.id},${i.tenant},${i.date},${i.plan},${i.amount},${i.status}`,
       ),
     ].join('\n');
     const a = document.createElement('a');
@@ -676,37 +1125,51 @@ function Billing() {
     URL.revokeObjectURL(a.href);
     notify('Invoice CSV exported.');
   }
+
+  const currentFilter = !invoicesQuery.status
+    ? 'All'
+    : invoicesQuery.status.charAt(0) + invoicesQuery.status.slice(1).toLowerCase();
+
   return (
     <>
       <div className="provider-metrics provider-three">
         <Metric
           label="Collected"
-          value={money(paid)}
-          note="Current invoice sample"
+          value={money(analytics?.collected ?? paidTotal)}
+          note="Gross revenue collected"
           icon={CircleDollarSign}
           tone="green"
         />
         <Metric
           label="Outstanding"
-          value={money(outstanding)}
-          note="Due and failed payments"
+          value={money(outstandingTotal)}
+          note="Due and pending invoices"
           icon={Clock3}
           tone="orange"
         />
         <Metric
           label="Failed payments"
-          value={String(invoices.filter((i) => i.status === 'Failed').length)}
-          note="Needs tenant follow-up"
+          value={String(failedCount)}
+          note="Needs salon follow-up"
           icon={Activity}
           tone="red"
         />
       </div>
+
       <div className="provider-toolbar">
+        <label className="provider-search">
+          <Search size={17} />
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search invoices by ID or salon name"
+          />
+        </label>
         <div className="provider-filters">
           {['All', 'Paid', 'Due', 'Failed', 'Refunded'].map((item) => (
             <button
-              className={filter === item ? 'active' : ''}
-              onClick={() => setFilter(item)}
+              className={currentFilter === item ? 'active' : ''}
+              onClick={() => handleFilterClick(item)}
               key={item}
             >
               {item}
@@ -717,11 +1180,12 @@ function Billing() {
           <Download size={16} /> Export CSV
         </button>
       </div>
+
       <section className="provider-card provider-table-card">
         <div className="provider-card-head">
           <div>
             <h2>Subscription invoices</h2>
-            <p>{rows.length} invoice records</p>
+            <p>Showing {invoices.length} of {invoicesMeta.total} records</p>
           </div>
         </div>
         <div className="provider-table-wrap">
@@ -734,58 +1198,148 @@ function Billing() {
                 <th>Plan</th>
                 <th>Amount</th>
                 <th>Status</th>
+                <th aria-label="Action">Action</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((invoice) => (
+              {invoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <td>
                     <strong>{invoice.id}</strong>
                   </td>
-                  <td>
-                    {tenants.find((t) => t.id === invoice.tenantId)?.name}
-                  </td>
+                  <td>{invoice.tenant}</td>
                   <td>{invoice.date}</td>
                   <td>{invoice.plan}</td>
                   <td>{money(invoice.amount)}</td>
                   <td>
-                    <Status value={invoice.status} />
+                    <Status value={invoice.displayStatus || invoice.status} />
+                  </td>
+                  <td>
+                    <select
+                      aria-label="Change invoice status"
+                      value={invoice.status.toUpperCase()}
+                      onChange={(e) => handleStatusChange(invoice, e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '11px',
+                        borderRadius: '6px',
+                        border: '1px solid #d0d5dd',
+                      }}
+                    >
+                      <option value="PAID">Paid</option>
+                      <option value="DUE">Due</option>
+                      <option value="FAILED">Failed</option>
+                      <option value="REFUNDED">Refunded</option>
+                    </select>
                   </td>
                 </tr>
               ))}
+              {invoices.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                    No invoices match your current filter.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          meta={invoicesMeta}
+          onPageChange={(page) => setInvoicesQuery((prev) => ({ ...prev, page }))}
+        />
       </section>
     </>
   );
 }
 
 function Support() {
-  const { tickets, setTickets, tenants, notify } = useProviderState();
-  const [filter, setFilter] = useState('Open');
+  const {
+    tickets,
+    ticketsMeta,
+    ticketsQuery,
+    setTicketsQuery,
+    refreshTickets,
+    refreshAnalytics,
+    notify,
+  } = useProviderState();
+
+  const [searchInput, setSearchInput] = useState(ticketsQuery.search ?? '');
   const [selected, setSelected] = useState<Ticket | null>(null);
-  const rows = tickets.filter(
-    (t) =>
-      filter === 'All' ||
-      (filter === 'Open' ? t.status !== 'Resolved' : t.status === filter),
-  );
-  function update(status: Ticket['status']) {
-    if (!selected) return;
-    setTickets((all) =>
-      all.map((t) => (t.id === selected.id ? { ...t, status } : t)),
-    );
-    setSelected({ ...selected, status });
-    notify(`${selected.id} moved to ${status.toLowerCase()}.`);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTicketsQuery((prev) => {
+        if (prev.search === (searchInput || undefined)) return prev;
+        return { ...prev, search: searchInput || undefined, page: 1 };
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchInput, setTicketsQuery]);
+
+  function handleFilterClick(statusFilter: string) {
+    let mapped: string | undefined = undefined;
+    if (statusFilter === 'Open') mapped = 'OPEN';
+    else if (statusFilter === 'In progress') mapped = 'IN_PROGRESS';
+    else if (statusFilter === 'Waiting') mapped = 'WAITING';
+    else if (statusFilter === 'Resolved') mapped = 'RESOLVED';
+    setTicketsQuery((prev) => ({ ...prev, status: mapped, page: 1 }));
   }
+
+  async function updateStatus(newStatus: string) {
+    if (!selected) return;
+    try {
+      const enumVal = newStatus.replace(/\s+/g, '_').toUpperCase();
+      await updateTicket(selected.id, { status: enumVal });
+      setSelected({ ...selected, status: newStatus, displayStatus: newStatus });
+      notify(`${selected.id} status updated to ${newStatus.toLowerCase()}.`);
+      await Promise.all([refreshTickets(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to update ticket.'));
+    }
+  }
+
+  async function removeTicket(ticketId: string) {
+    if (!window.confirm('Delete this support ticket?')) return;
+    try {
+      await deleteTicket(ticketId);
+      setSelected(null);
+      notify('Ticket deleted.');
+      await Promise.all([refreshTickets(), refreshAnalytics()]);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to delete ticket.'));
+    }
+  }
+
+  const currentFilter = !ticketsQuery.status
+    ? 'All'
+    : ticketsQuery.status === 'OPEN'
+      ? 'Open'
+      : ticketsQuery.status === 'IN_PROGRESS'
+        ? 'In progress'
+        : ticketsQuery.status === 'WAITING'
+          ? 'Waiting'
+          : ticketsQuery.status === 'RESOLVED'
+            ? 'Resolved'
+            : 'All';
+
   return (
     <>
       <div className="provider-toolbar">
+        <label className="provider-search">
+          <Search size={17} />
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search tickets by subject, category, or salon"
+          />
+        </label>
         <div className="provider-filters">
           {['Open', 'In progress', 'Waiting', 'Resolved', 'All'].map((item) => (
             <button
-              className={filter === item ? 'active' : ''}
-              onClick={() => setFilter(item)}
+              className={currentFilter === item ? 'active' : ''}
+              onClick={() => handleFilterClick(item)}
               key={item}
             >
               {item}
@@ -793,27 +1347,38 @@ function Support() {
           ))}
         </div>
       </div>
+
       <div className="provider-ticket-list">
-        {rows.map((ticket) => (
+        {tickets.map((ticket) => (
           <button key={ticket.id} onClick={() => setSelected(ticket)}>
             <span
               className={`provider-priority priority-${ticket.priority.toLowerCase()}`}
             >
-              {ticket.priority}
+              {ticket.displayPriority || ticket.priority}
             </span>
             <div>
               <strong>{ticket.subject}</strong>
               <p>
-                {ticket.id} ·{' '}
-                {tenants.find((t) => t.id === ticket.tenantId)?.name} ·{' '}
-                {ticket.category}
+                {ticket.id} · {ticket.tenant} · {ticket.category}
               </p>
             </div>
-            <Status value={ticket.status} />
+            <Status value={ticket.displayStatus || ticket.status} />
             <ChevronRight size={17} />
           </button>
         ))}
+        {tickets.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '48px', color: 'var(--muted)' }}>
+            No tickets found in this queue.
+          </div>
+        )}
       </div>
+
+      <Pagination
+        meta={ticketsMeta}
+        onPageChange={(page) => setTicketsQuery((prev) => ({ ...prev, page }))}
+      />
+
+      {/* Ticket Details Drawer */}
       {selected && (
         <dialog
           open
@@ -836,32 +1401,39 @@ function Support() {
             <span
               className={`provider-priority priority-${selected.priority.toLowerCase()}`}
             >
-              {selected.priority}
+              {selected.displayPriority || selected.priority}
             </span>
             <h2>{selected.subject}</h2>
             <p>
-              {selected.id} ·{' '}
-              {tenants.find((t) => t.id === selected.tenantId)?.name}
+              {selected.id} · {selected.tenant} · {selected.category}
             </p>
             <div className="provider-message">{selected.message}</div>
             <label>
-              Status
+              Update Ticket Status
               <select
                 value={selected.status}
-                onChange={(e) => update(e.target.value as Ticket['status'])}
+                onChange={(e) => updateStatus(e.target.value)}
               >
-                <option>Open</option>
-                <option>In progress</option>
-                <option>Waiting</option>
-                <option>Resolved</option>
+                <option value="Open">Open</option>
+                <option value="In progress">In progress</option>
+                <option value="Waiting">Waiting</option>
+                <option value="Resolved">Resolved</option>
               </select>
             </label>
-            <button
-              className="provider-primary"
-              onClick={() => update('Resolved')}
-            >
-              <Check size={17} /> Resolve ticket
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
+              <button
+                className="provider-primary"
+                onClick={() => updateStatus('Resolved')}
+              >
+                <Check size={17} /> Mark as Resolved
+              </button>
+              <button
+                className="provider-danger"
+                onClick={() => removeTicket(selected.id)}
+              >
+                Delete Ticket
+              </button>
+            </div>
           </aside>
         </dialog>
       )}
@@ -871,89 +1443,37 @@ function Support() {
 
 function SettingsPage() {
   const { settings, setSettings, notify } = useProviderState();
-  const [draft, setDraft] = useState({ ...settings });
+
+  async function handleSaveSettings(draft: ProviderSettings) {
+    const saved = await saveSettings(draft);
+    setSettings(saved);
+    notify('Platform settings saved to cloud database.');
+  }
+
   return (
     <div className="provider-settings-grid">
-      <form
-        className="provider-card provider-settings"
-        onSubmit={(e) => {
-          e.preventDefault();
-          setSettings(draft);
-          notify('Platform settings saved.');
-        }}
-      >
-        <div className="provider-card-head">
-          <div>
-            <h2>Platform configuration</h2>
-            <p>Changes are stored for this demo session.</p>
-          </div>
-        </div>
-        <label>
-          Platform name
-          <input
-            value={draft.platformName}
-            onChange={(e) =>
-              setDraft({ ...draft, platformName: e.target.value })
-            }
-          />
-        </label>
-        <label>
-          Support email
-          <input
-            type="email"
-            value={draft.supportEmail}
-            onChange={(e) =>
-              setDraft({ ...draft, supportEmail: e.target.value })
-            }
-          />
-        </label>
-        <label>
-          Default trial length
-          <input
-            type="number"
-            min="1"
-            value={draft.trialDays}
-            onChange={(e) =>
-              setDraft({ ...draft, trialDays: Number(e.target.value) })
-            }
-          />
-        </label>
-        <Toggle
-          label="Require tenant approval"
-          note="Review every new business before activation."
-          checked={draft.tenantApproval}
-          onChange={(value) => setDraft({ ...draft, tenantApproval: value })}
-        />
-        <Toggle
-          label="Maintenance mode"
-          note="Pause customer bookings across every tenant."
-          checked={draft.maintenanceMode}
-          onChange={(value) => setDraft({ ...draft, maintenanceMode: value })}
-        />
-        <Toggle
-          label="Incident email alerts"
-          note="Email platform owners when a service is degraded."
-          checked={draft.incidentEmails}
-          onChange={(value) => setDraft({ ...draft, incidentEmails: value })}
-        />
-        <button className="provider-primary" type="submit">
-          Save settings
-        </button>
-      </form>
+      <SettingsForm
+        key={`${settings.platformName}-${settings.trialDays}-${settings.supportEmail}`}
+        initialSettings={settings}
+        onSave={handleSaveSettings}
+        notify={notify}
+      />
       <section className="provider-card provider-system">
+
         <div className="provider-card-head">
           <div>
             <h2>System health</h2>
-            <p>Live demo environment</p>
+            <p>Serenity Multi-Tenant Infrastructure</p>
           </div>
           <ShieldCheck size={22} />
         </div>
         {[
-          'Web application',
-          'Booking API',
-          'Email notifications',
-          'Billing webhooks',
-          'Database',
+          'Customer Booking Portal (SSR)',
+          'Salon Tenant Operations Dashboard',
+          'Super Admin Provider Platform API',
+          'Automated Scheduling & Double-Booking Guard',
+          'Loyalty Rewards Engine',
+          'PostgreSQL Isolated Multi-Tenant DB',
         ].map((service) => (
           <div key={service}>
             <span>
@@ -963,9 +1483,102 @@ function SettingsPage() {
             <strong>Operational</strong>
           </div>
         ))}
-        <p>Last checked just now · 99.99% uptime</p>
+        <p>Real-time cluster monitoring · 99.99% uptime</p>
       </section>
     </div>
+  );
+}
+
+function SettingsForm({
+  initialSettings,
+  onSave,
+  notify,
+}: {
+  initialSettings: ProviderSettings;
+  onSave: (draft: ProviderSettings) => Promise<void>;
+  notify: (msg: string) => void;
+}) {
+  const [draft, setDraft] = useState<ProviderSettings>({ ...initialSettings });
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function handleSubmit(e: React.SyntheticEvent) {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      await onSave(draft);
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, 'Failed to save settings.'));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <form className="provider-card provider-settings" onSubmit={handleSubmit}>
+      <div className="provider-card-head">
+        <div>
+          <h2>Platform configuration</h2>
+          <p>Persisted global settings for all tenants & automated jobs.</p>
+        </div>
+      </div>
+      <label>
+        Platform name
+        <input
+          value={draft.platformName}
+          onChange={(e) =>
+            setDraft({ ...draft, platformName: e.target.value })
+          }
+        />
+      </label>
+      <label>
+        Support email
+        <input
+          type="email"
+          value={draft.supportEmail}
+          onChange={(e) =>
+            setDraft({ ...draft, supportEmail: e.target.value })
+          }
+        />
+      </label>
+      <label>
+        Default trial length (days)
+        <input
+          type="number"
+          min="1"
+          value={draft.trialDays}
+          onChange={(e) =>
+            setDraft({ ...draft, trialDays: Number(e.target.value) })
+          }
+        />
+      </label>
+      <Toggle
+        label="Require tenant approval"
+        note="Review every new business registration before activating workspace."
+        checked={draft.tenantApproval}
+        onChange={(value) => setDraft({ ...draft, tenantApproval: value })}
+      />
+      <Toggle
+        label="Maintenance mode"
+        note="Pause customer bookings across every salon workspace."
+        checked={draft.maintenanceMode}
+        onChange={(value) => setDraft({ ...draft, maintenanceMode: value })}
+      />
+      <Toggle
+        label="Incident email alerts"
+        note="Email platform administrators when any background queue fails."
+        checked={draft.incidentEmails}
+        onChange={(value) => setDraft({ ...draft, incidentEmails: value })}
+      />
+      <Toggle
+        label="Automated billing reminders"
+        note="Automatically dispatch invoice notices prior to billing date."
+        checked={draft.billingEmails}
+        onChange={(value) => setDraft({ ...draft, billingEmails: value })}
+      />
+      <button className="provider-primary" type="submit" disabled={isSaving}>
+        {isSaving ? 'Saving...' : 'Save settings'}
+      </button>
+    </form>
   );
 }
 

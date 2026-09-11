@@ -8,6 +8,7 @@ import {
   CircleDollarSign,
   CreditCard,
   Headphones,
+  LogOut,
   Menu,
   Settings,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useProviderState } from './provider-state';
+import { ProviderLoginPage } from './login';
 
 const navigation = [
   { label: 'Overview', href: '/', icon: BarChart3 },
@@ -28,13 +30,48 @@ const navigation = [
 export function ProviderShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { tickets, settings } = useProviderState();
+  const { user, isLoadingUser, logoutUser, tickets, settings } =
+    useProviderState();
+
+  if (isLoadingUser) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#f8fafc',
+          color: '#64748b',
+          fontSize: 14,
+          fontWeight: 500,
+        }}
+      >
+        <span>Loading Serenity Cloud…</span>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <ProviderLoginPage />;
+  }
+
   const openTickets = tickets.filter(
-    (ticket) => ticket.status !== 'Resolved',
+    (ticket) =>
+      ticket.status !== 'Resolved' && ticket.status !== 'RESOLVED',
   ).length;
+
   const current =
     navigation.find((item) => item.href === pathname)?.label ??
     'Provider console';
+
+  const userInitials = user.name
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
     <div className="provider-app">
       <aside className={`provider-sidebar ${open ? 'is-open' : ''}`}>
@@ -44,7 +81,7 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
           </span>
           <div>
             <strong>{settings.platformName}</strong>
-            <small>Provider console</small>
+            <small>Super Admin Console</small>
           </div>
         </div>
         <nav aria-label="Provider navigation">
@@ -61,7 +98,9 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
-                {item.label === 'Support' && <b>{openTickets}</b>}
+                {item.label === 'Support' && openTickets > 0 && (
+                  <b>{openTickets}</b>
+                )}
               </Link>
             );
           })}
@@ -71,15 +110,36 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
             <ShieldCheck size={17} />
             <span>
               <strong>All systems operational</strong>
-              <small>Checked just now</small>
+              <small>Live Cloud Engine</small>
             </span>
           </div>
           <div className="provider-user">
-            <span>HP</span>
-            <div>
-              <strong>Hlyan Phyo</strong>
-              <small>Platform owner</small>
+            <span>{userInitials || 'AD'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.name}
+              </strong>
+              <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.email}
+              </small>
             </div>
+            <button
+              type="button"
+              onClick={logoutUser}
+              title="Sign Out"
+              aria-label="Sign Out"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#98a2b3',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </aside>
@@ -101,16 +161,30 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
           </button>
           <div>
             <strong>{current}</strong>
-            <small>Serenity Cloud administration</small>
+            <small>Serenity Cloud Super Administration</small>
           </div>
-          <span className="provider-demo">DEMO DATA</span>
-          <a className="provider-workspace-link" href="http://127.0.0.1:3000">
+          <span
+            className="provider-demo"
+            style={{
+              background: '#ecfdf5',
+              borderColor: '#a7f3d0',
+              color: '#047857',
+            }}
+          >
+            ● LIVE CLOUD
+          </span>
+          <a
+            className="provider-workspace-link"
+            href="http://127.0.0.1:3000"
+            target="_blank"
+            rel="noreferrer"
+          >
             Open tenant workspace ↗
           </a>
         </header>
         {settings.maintenanceMode && (
           <div className="provider-maintenance">
-            Maintenance mode is enabled. New bookings are temporarily paused.
+            Maintenance mode is enabled. New bookings are temporarily paused across all salons.
           </div>
         )}
         <div className="provider-content">{children}</div>
