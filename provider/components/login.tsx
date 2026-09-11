@@ -167,7 +167,7 @@ export function ProviderLoginPage() {
           <div className="provider-portal-links">
             <span>Operating Salons?</span>
             <a
-              href="http://localhost:3000"
+              href="https://saas-tenant-iota.vercel.app"
               target="_blank"
               rel="noreferrer"
               className="portal-link"
