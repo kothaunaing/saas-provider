@@ -35,16 +35,6 @@ export interface QueryTenantsParams extends PaginationParams {
   planId?: string;
 }
 
-export interface CreateTenantPayload {
-  slug: string;
-  name: string;
-  ownerName: string;
-  email: string;
-  city?: string;
-  planId?: string;
-  status?: string;
-}
-
 export interface UpdateTenantPayload {
   name?: string;
   ownerName?: string;
@@ -65,13 +55,6 @@ export async function getTenants(
 
 export async function getTenant(id: string): Promise<Tenant> {
   const res = await api.get<Tenant>(`/platform/tenants/${id}`);
-  return res.data;
-}
-
-export async function createTenant(
-  payload: CreateTenantPayload,
-): Promise<Tenant> {
-  const res = await api.post<Tenant>("/platform/tenants", payload);
   return res.data;
 }
 

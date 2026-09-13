@@ -25,7 +25,6 @@ import {
   type Invoice,
   type Ticket,
   type ProviderSettings,
-  createTenant,
   updateTenant,
   deleteTenant,
   createPlan,
@@ -574,21 +573,11 @@ function Tenants() {
     setTenantsQuery,
     refreshTenants,
     refreshAnalytics,
-    plans,
     notify,
   } = useProviderState();
 
   const [searchInput, setSearchInput] = useState(tenantsQuery.search ?? "");
   const [selected, setSelected] = useState<Tenant | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [newTenant, setNewTenant] = useState({
-    name: "",
-    slug: "",
-    ownerName: "",
-    email: "",
-    city: "",
-    planId: "",
-  });
 
   // Debounce search input to server query
   useEffect(() => {
@@ -633,38 +622,6 @@ function Tenants() {
     }
   }
 
-  async function handleCreateTenant(e: React.SyntheticEvent) {
-    e.preventDefault();
-    if (
-      !newTenant.name ||
-      !newTenant.slug ||
-      !newTenant.email ||
-      !newTenant.ownerName
-    ) {
-      notify("Please fill out all required fields.");
-      return;
-    }
-    try {
-      await createTenant({
-        ...newTenant,
-        planId: newTenant.planId || (plans[0]?.id ?? undefined),
-      });
-      setIsCreating(false);
-      setNewTenant({
-        name: "",
-        slug: "",
-        ownerName: "",
-        email: "",
-        city: "",
-        planId: "",
-      });
-      notify(`Tenant "${newTenant.name}" registered successfully.`);
-      await Promise.all([refreshTenants(), refreshAnalytics()]);
-    } catch (err: unknown) {
-      notify(getErrorMessage(err, "Failed to create tenant."));
-    }
-  }
-
   const currentFilter = !tenantsQuery.status
     ? "All"
     : tenantsQuery.status.charAt(0) +
@@ -692,12 +649,6 @@ function Tenants() {
             </button>
           ))}
         </div>
-        <button
-          className="provider-primary"
-          onClick={() => setIsCreating(true)}
-        >
-          <Plus size={17} /> Add tenant
-        </button>
       </div>
 
       <section className="provider-card provider-table-card">
@@ -797,123 +748,6 @@ function Tenants() {
         </dialog>
       )}
 
-      {/* Create Tenant Modal */}
-      {isCreating && (
-        <dialog open className="provider-modal-layer" aria-label="Add tenant">
-          <button
-            className="provider-drawer-scrim"
-            onClick={() => setIsCreating(false)}
-            aria-label="Close dialog"
-          />
-          <form className="provider-modal" onSubmit={handleCreateTenant}>
-            <button
-              type="button"
-              className="provider-drawer-close"
-              onClick={() => setIsCreating(false)}
-            >
-              <X size={18} />
-              <span className="sr-only">Close</span>
-            </button>
-            <h2>Onboard New Tenant</h2>
-            <p>Create a dedicated salon/spa workspace on Serenity Cloud.</p>
-
-            <label>
-              Business Name *
-              <input
-                required
-                placeholder="e.g. Lotus Wellness Spa"
-                value={newTenant.name}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setNewTenant((prev) => ({
-                    ...prev,
-                    name: val,
-                    slug:
-                      prev.slug ||
-                      val
-                        .toLowerCase()
-                        .replace(/[^a-z0-9]+/g, "-")
-                        .replace(/(^-|-$)/g, ""),
-                  }));
-                }}
-              />
-            </label>
-
-            <label>
-              Subdomain / URL Slug *
-              <input
-                required
-                placeholder="e.g. lotus-wellness"
-                value={newTenant.slug}
-                onChange={(e) =>
-                  setNewTenant({ ...newTenant, slug: e.target.value })
-                }
-              />
-            </label>
-
-            <label>
-              Owner Full Name *
-              <input
-                required
-                placeholder="e.g. Sophia Lin"
-                value={newTenant.ownerName}
-                onChange={(e) =>
-                  setNewTenant({ ...newTenant, ownerName: e.target.value })
-                }
-              />
-            </label>
-
-            <label>
-              Owner Email *
-              <input
-                type="email"
-                required
-                placeholder="e.g. owner@lotuswellness.com"
-                value={newTenant.email}
-                onChange={(e) =>
-                  setNewTenant({ ...newTenant, email: e.target.value })
-                }
-              />
-            </label>
-
-            <label>
-              City / Location
-              <input
-                placeholder="e.g. San Francisco, CA"
-                value={newTenant.city}
-                onChange={(e) =>
-                  setNewTenant({ ...newTenant, city: e.target.value })
-                }
-              />
-            </label>
-
-            <label>
-              Subscription Tier
-              <select
-                value={newTenant.planId}
-                onChange={(e) =>
-                  setNewTenant({ ...newTenant, planId: e.target.value })
-                }
-              >
-                <option value="">Select a plan</option>
-                {plans.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({money(p.price)}/mo)
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              className="provider-primary"
-              type="submit"
-              style={{ marginTop: "14px" }}
-            >
-              Create Tenant
-            </button>
-          </form>
-        </dialog>
-      )}
     </>
   );
 }

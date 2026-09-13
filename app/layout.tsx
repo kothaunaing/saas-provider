@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ProviderShell } from "@/provider/components/provider-shell";
 import { ProviderState } from "@/provider/components/provider-state";
+import { MotionProvider } from "@/provider/components/motion-provider";
 import "./globals.css";
 import "@/provider/styles/provider.css";
 
@@ -19,7 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ProviderState>
-          <ProviderShell>{children}</ProviderShell>
+          <ProviderShell><MotionProvider>{children}</MotionProvider></ProviderShell>
         </ProviderState>
       </body>
     </html>
