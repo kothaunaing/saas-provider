@@ -925,7 +925,7 @@ function Plans() {
             <h2>Edit {editing.name}</h2>
             <p>Changes take effect immediately across Serenity Cloud.</p>
             <label>
-              Monthly price ($)
+              Monthly price (Ks)
               <input
                 type="number"
                 min="0"
@@ -1011,7 +1011,7 @@ function Plans() {
               />
             </label>
             <label>
-              Monthly Price ($) *
+              Monthly Price (Ks) *
               <input
                 type="number"
                 min="0"

@@ -21,9 +21,7 @@ export function getProviderMetrics(
 }
 
 export function money(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+  return `Ks ${new Intl.NumberFormat("en-MM", {
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(value)}`;
 }
